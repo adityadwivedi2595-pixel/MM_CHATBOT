@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log
+.env
+.git
+.gitignore
+__pycache__
+*.pyc
+frontend/node_modules
+backend/storage/uploads/*
+backend/storage/generated/*
