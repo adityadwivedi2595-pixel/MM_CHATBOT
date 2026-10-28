@@ -1199,8 +1199,54 @@ html, body {
 }
 
 /* ==========================================================================
-   Bottom Multimodal Input Bar
+   Bottom Multimodal Input Bar & Capabilities Action Bar
    ========================================================================== */
+.capabilities-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: 860px;
+  width: 100%;
+  margin-bottom: 0.55rem;
+  overflow-x: auto;
+  padding: 0.15rem 0.2rem 0.35rem;
+  scrollbar-width: none;
+}
+
+.capabilities-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.cap-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.32rem 0.7rem;
+  border-radius: 9999px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+  backdrop-filter: blur(12px);
+  user-select: none;
+}
+
+.cap-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-focus);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.cap-icon {
+  font-size: 0.88rem;
+}
+
 .input-section {
   padding: 0 1.5rem 1.25rem;
   background: transparent;

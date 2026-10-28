@@ -8,3 +8,4 @@ __pycache__
 frontend/node_modules
 backend/storage/uploads/*
 backend/storage/generated/*
+

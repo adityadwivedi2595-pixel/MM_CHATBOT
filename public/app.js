@@ -14,6 +14,9 @@
     THEME: 'mm_chatbot_theme_v1'
   };
 
+  // Base API URL: when launched directly via file:/// protocol, proxy to localhost:3000
+  const API_BASE = (window.location.protocol === 'file:') ? 'http://localhost:3000' : '';
+
   // State
   let conversations = [];
   let currentChatId = null;
@@ -78,6 +81,8 @@
     themeToggleBtn: document.getElementById('themeToggleBtn'),
     themeMenu: document.getElementById('themeMenu'),
     openSettingsBtn: document.getElementById('openSettingsBtn'),
+    exportChatBtn: document.getElementById('exportChatBtn'),
+    capabilitiesBar: document.getElementById('capabilitiesBar'),
     apiKeyStatusCard: document.getElementById('apiKeyStatusCard'),
     apiKeyStatusLabel: document.getElementById('apiKeyStatusLabel'),
     apiKeySubText: document.getElementById('apiKeySubText'),
@@ -251,7 +256,7 @@
   // Verify server configuration
   async function checkServerConfig() {
     try {
-      const res = await fetch('/api/config');
+      const res = await fetch(API_BASE + '/api/config');
       if (res.ok) {
         const data = await res.json();
         if (data.models && Array.isArray(data.models) && data.models.length > 0) {
@@ -285,11 +290,11 @@
     if (settings.apiKey && settings.apiKey.trim()) {
       elements.apiKeyStatusCard.classList.remove('demo-mode');
       elements.apiKeyStatusLabel.textContent = 'Custom API Key';
-      elements.apiKeySubText = 'Gemini Live Active';
+      elements.apiKeySubText.textContent = 'Gemini Live Active';
     } else {
       elements.apiKeyStatusCard.classList.add('demo-mode');
       elements.apiKeyStatusLabel.textContent = 'Multimodal Demo';
-      elements.apiKeySubText = 'Tap to add API key';
+      elements.apiKeySubText.textContent = 'Tap to add API key';
     }
   }
 
@@ -570,7 +575,11 @@
     const text = elements.messageInput.value.trim();
     if (!text && pendingAttachments.length === 0) return;
 
-    const chat = getActiveConversation();
+    let chat = getActiveConversation();
+    if (!chat) {
+      createNewConversation();
+      chat = getActiveConversation();
+    }
     if (!chat) return;
 
     // Build user message
@@ -628,12 +637,19 @@
         ? settings.customSystemPrompt
         : (SYSTEM_PERSONAS[settings.systemPromptPreset] || SYSTEM_PERSONAS.general);
 
-      const response = await fetch('/api/chat', {
+      // Clean prior failed error blocks from conversation history to avoid 400 Bad Request
+      const cleanHistory = chat.messages.slice(0, -1).filter(m => {
+        if (!m || !m.content) return false;
+        if (m.content.includes('> ⚠️ **Request Failed:') || m.content.includes('> ⚠️ **Error:')) return false;
+        return true;
+      });
+
+      const response = await fetch(API_BASE + '/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: abortController.signal,
         body: JSON.stringify({
-          messages: chat.messages.slice(0, -1), // all messages up to current
+          messages: cleanHistory,
           model: elements.modelSelect.value || settings.model,
           temperature: settings.temperature,
           systemInstruction: activeSystemInstruction,
@@ -1179,6 +1195,51 @@
       });
     });
 
+    // Supercharged AI Capabilities Bar ("Do Everything" Bar)
+    if (elements.capabilitiesBar) {
+      elements.capabilitiesBar.querySelectorAll('.cap-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const mode = btn.dataset.mode;
+          if (mode === 'ask') {
+            elements.messageInput.placeholder = 'Ask anything: Science, history, philosophy, life advice, facts...';
+            elements.messageInput.focus();
+          } else if (mode === 'code') {
+            elements.messageInput.value = 'Write a clean, production-ready script to ';
+            elements.messageInput.focus();
+            autoResizeTextarea();
+          } else if (mode === 'web') {
+            elements.messageInput.value = 'Search the web and provide the latest verified information about: ';
+            elements.messageInput.focus();
+            autoResizeTextarea();
+          } else if (mode === 'translate') {
+            elements.messageInput.value = 'Translate the following text into Spanish, French, German, and Hindi: ';
+            elements.messageInput.focus();
+            autoResizeTextarea();
+          } else if (mode === 'math') {
+            elements.messageInput.value = 'Solve this math problem step-by-step with formulas and clear explanations: ';
+            elements.messageInput.focus();
+            autoResizeTextarea();
+          } else if (mode === 'summarize') {
+            elements.messageInput.value = 'Summarize the key takeaways, bullet points, and actionable insights from: ';
+            elements.messageInput.focus();
+            autoResizeTextarea();
+          } else if (mode === 'write') {
+            elements.messageInput.value = 'Draft a compelling, professional ';
+            elements.messageInput.focus();
+            autoResizeTextarea();
+          } else if (mode === 'vision') {
+            elements.fileInput.click();
+          } else if (mode === 'export') {
+            exportCurrentChat();
+          }
+        });
+      });
+    }
+
+    if (elements.exportChatBtn) {
+      elements.exportChatBtn.addEventListener('click', exportCurrentChat);
+    }
+
     // Model select change
     elements.modelSelect.addEventListener('change', () => {
       settings.model = elements.modelSelect.value;
@@ -1289,6 +1350,30 @@
     });
   }
 
+  function exportCurrentChat() {
+    const chat = getActiveConversation();
+    if (!chat || !chat.messages || chat.messages.length === 0) {
+      alert('There are no messages in this conversation to export.');
+      return;
+    }
+    let md = `# ${chat.title || 'MM Chatbot Conversation'}\n\n`;
+    md += `*Exported on ${new Date().toLocaleString()}*\n\n---\n\n`;
+    chat.messages.forEach(m => {
+      const isU = (m.role === 'user');
+      const sender = isU ? '👤 **You**' : '🌌 **MM Chatbot**';
+      md += `### ${sender} *(${formatTime(m.timestamp)})*\n\n${m.content || ''}\n\n---\n\n`;
+    });
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(chat.title || 'conversation').replace(/[^a-zA-Z0-9_-]/g, '_')}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   async function testApiKeyConnection() {
     const key = elements.apiKeyInput.value.trim();
     if (!key) {
@@ -1300,7 +1385,7 @@
     elements.testApiKeyBtn.disabled = true;
 
     try {
-      const res = await fetch('/api/test-key', {
+      const res = await fetch(API_BASE + '/api/test-key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apiKey: key })
