@@ -112,6 +112,8 @@
     messageInput: document.getElementById('messageInput'),
     sendBtn: document.getElementById('sendBtn'),
     stopGenerationBtn: document.getElementById('stopGenerationBtn'),
+    floatingStopBtn: document.getElementById('floatingStopBtn'),
+    stopControlWrapper: document.getElementById('stopControlWrapper'),
     dragDropOverlay: document.getElementById('dragDropOverlay'),
 
     // Camera Modal
@@ -672,6 +674,10 @@
       const cursor = streamRow.querySelector('.streaming-cursor');
 
       while (true) {
+        if (!isGenerating) {
+          try { await reader.cancel(); } catch (e) {}
+          break;
+        }
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -719,8 +725,8 @@
       }
 
     } catch (err) {
-      if (err.name === 'AbortError') {
-        assistantMessage.content += ' *(Generation stopped by user)*';
+      if (err.name === 'AbortError' || !isGenerating) {
+        assistantMessage.content = (fullContent || assistantMessage.content) + ' *(Generation stopped by user)*';
       } else {
         assistantMessage.content += `\n\n> ⚠️ **Request Failed:** ${err.message}`;
       }
@@ -759,7 +765,25 @@
     isGenerating = generating;
     elements.sendBtn.classList.toggle('hidden', generating);
     elements.stopGenerationBtn.classList.toggle('hidden', !generating);
+    if (elements.stopControlWrapper) {
+      elements.stopControlWrapper.classList.toggle('hidden', !generating);
+    }
     elements.messageInput.disabled = generating;
+    if (!generating) {
+      elements.messageInput.focus();
+    }
+  }
+
+  function stopGeneration() {
+    if (!isGenerating) return;
+    if (abortController) {
+      abortController.abort();
+    }
+    isGenerating = false;
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setGeneratingState(false);
   }
 
   function regenerateFromIndex(index) {
@@ -1141,8 +1165,17 @@
   function bindEvents() {
     // Send message triggers
     elements.sendBtn.addEventListener('click', sendMessage);
-    elements.stopGenerationBtn.addEventListener('click', () => {
-      if (abortController) abortController.abort();
+
+    // Stop generation triggers (Dock button, Floating button, and Escape key)
+    elements.stopGenerationBtn.addEventListener('click', stopGeneration);
+    if (elements.floatingStopBtn) {
+      elements.floatingStopBtn.addEventListener('click', stopGeneration);
+    }
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && isGenerating) {
+        e.preventDefault();
+        stopGeneration();
+      }
     });
 
     elements.messageInput.addEventListener('keydown', (e) => {

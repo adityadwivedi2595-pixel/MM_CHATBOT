@@ -283,6 +283,15 @@
 
       <!-- Bottom Multimodal Input Bar -->
       <div class="input-section">
+        <!-- Floating Stop Generating Control (Centered, Pulsing) -->
+        <div id="stopControlWrapper" class="stop-control-wrapper hidden">
+          <button id="floatingStopBtn" class="floating-stop-btn" title="Stop generating response (Esc)" aria-label="Stop Generation">
+            <span class="stop-pulse-icon">⏹</span>
+            <span class="stop-btn-text">Stop Generating</span>
+            <span class="stop-shortcut-badge">Esc</span>
+          </button>
+        </div>
+
         <!-- Supercharged AI Capabilities Bar ("Do Everything" Bar) -->
         <div class="capabilities-bar" id="capabilitiesBar">
           <button class="cap-btn" data-mode="ask" title="General AI Assistant & Reasoning">
@@ -375,7 +384,7 @@
         </div>
 
         <div class="input-hint-row">
-          <span>Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for new line. Drop files anywhere.</span>
+          <span>Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for new line, <kbd>Esc</kbd> to stop response.</span>
         </div>
       </div>
     </main>
