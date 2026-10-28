@@ -21,14 +21,9 @@ A high-performance, full-stack Multimodal AI Chatbot powered by Google Gemini (G
 
 ---
 
-## 🚀 Getting Started (Python Backend)
+## 🚀 Getting Started
 
-### 1. Install Python Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Configure Environment (Optional)
+### 1. Configure Environment
 Copy `.env.example` to `.env` or enter your Gemini API key inside the UI **Settings (⚙️)**:
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
@@ -36,22 +31,63 @@ PORT=3000
 ```
 *(Get a free key from [Google AI Studio](https://aistudio.google.com/app/apikey))*
 
-### 3. Run the Python Web App
+### 2A. Run with Node.js (Production Server)
 ```bash
+npm install
+npm start
+```
+
+### 2B. Run with Python FastAPI
+```bash
+pip install -r requirements.txt
 python app.py
 ```
+
 Open your browser and navigate to:
 ```
 http://localhost:3000
 ```
 
-### 4. Or Use the Standalone Python Multimodal CLI
+### 3. Standalone Python Multimodal CLI
 ```bash
 # Interactive terminal session
 python multimodal_cli.py --interactive
 
 # Analyze an image directly from terminal
 python multimodal_cli.py --image path/to/image.png --prompt "Analyze this image"
+```
+
+---
+
+## 🚢 Production Deployment
+
+### 🐳 Docker & Docker Compose
+To run in containerized production with auto-restart and health checks:
+```bash
+docker compose up -d --build
+```
+
+### ⚡ PM2 Process Manager
+For high-availability clustering and process management:
+```bash
+npm install -g pm2
+pm2 start ecosystem.config.js --env production
+```
+
+### 🩺 Health Checks
+The production server exposes automated health monitoring endpoints:
+* `GET /api/health`
+* `GET /healthz`
+
+Response:
+```json
+{
+  "status": "healthy",
+  "uptime": 120,
+  "timestamp": "2026-10-28T06:43:35.794Z",
+  "service": "mm-chatbot",
+  "version": "1.0.0"
+}
 ```
 
 ---
