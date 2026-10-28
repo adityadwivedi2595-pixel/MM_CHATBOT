@@ -115,6 +115,11 @@
     fileInput: document.getElementById('fileInput'),
     imageOnlyInput: document.getElementById('imageOnlyInput'),
     attachFileBtn: document.getElementById('attachFileBtn'),
+    attachMenuWrapper: document.getElementById('attachMenuWrapper'),
+    attachMenuDropdown: document.getElementById('attachMenuDropdown'),
+    menuTakePhotoBtn: document.getElementById('menuTakePhotoBtn'),
+    menuUploadImageBtn: document.getElementById('menuUploadImageBtn'),
+    menuAttachFileBtn: document.getElementById('menuAttachFileBtn'),
     cameraBtn: document.getElementById('cameraBtn'),
     micBtn: document.getElementById('micBtn'),
     messageInput: document.getElementById('messageInput'),
@@ -139,6 +144,7 @@
     flipCameraBtnMobile: document.getElementById('flipCameraBtnMobile'),
     confirmSnapshotBtn: document.getElementById('confirmSnapshotBtn'),
     retakeSnapshotBtn: document.getElementById('retakeSnapshotBtn'),
+    discardSnapshotBtn: document.getElementById('discardSnapshotBtn'),
     cancelCameraBtn: document.getElementById('cancelCameraBtn'),
     closeCameraModalBtn: document.getElementById('closeCameraModalBtn'),
 
@@ -1729,12 +1735,53 @@
       }
     });
 
-    // Attachment controls
-    elements.attachFileBtn.addEventListener('click', () => elements.fileInput.click());
+    // Attachment menu controls (Take Photo, Upload Image, Attach File)
+    if (elements.attachFileBtn && elements.attachMenuDropdown) {
+      elements.attachFileBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        elements.attachMenuDropdown.classList.toggle('hidden');
+      });
+    }
+
+    if (elements.menuTakePhotoBtn) {
+      elements.menuTakePhotoBtn.addEventListener('click', () => {
+        if (elements.attachMenuDropdown) elements.attachMenuDropdown.classList.add('hidden');
+        openCameraModal();
+      });
+    }
+
+    if (elements.menuUploadImageBtn) {
+      elements.menuUploadImageBtn.addEventListener('click', () => {
+        if (elements.attachMenuDropdown) elements.attachMenuDropdown.classList.add('hidden');
+        elements.imageOnlyInput.click();
+      });
+    }
+
+    if (elements.menuAttachFileBtn) {
+      elements.menuAttachFileBtn.addEventListener('click', () => {
+        if (elements.attachMenuDropdown) elements.attachMenuDropdown.classList.add('hidden');
+        elements.fileInput.click();
+      });
+    }
+
+    document.addEventListener('click', (e) => {
+      if (elements.attachMenuWrapper && !elements.attachMenuWrapper.contains(e.target)) {
+        if (elements.attachMenuDropdown) elements.attachMenuDropdown.classList.add('hidden');
+      }
+    });
+
     elements.fileInput.addEventListener('change', (e) => {
       Array.from(e.target.files).forEach(f => addFileAttachment(f));
       elements.fileInput.value = '';
     });
+
+    if (elements.imageOnlyInput) {
+      elements.imageOnlyInput.addEventListener('change', (e) => {
+        Array.from(e.target.files).forEach(f => addFileAttachment(f));
+        elements.imageOnlyInput.value = '';
+      });
+    }
+
     elements.clearAllAttachmentsBtn.addEventListener('click', clearPendingAttachments);
 
     // Camera Controls (Mobile & Cross-Device)
@@ -1746,6 +1793,9 @@
     if (elements.flipCameraBtnMobile) elements.flipCameraBtnMobile.addEventListener('click', toggleCameraFacing);
     if (elements.confirmSnapshotBtn) elements.confirmSnapshotBtn.addEventListener('click', confirmSnapshot);
     if (elements.retakeSnapshotBtn) elements.retakeSnapshotBtn.addEventListener('click', retakeSnapshot);
+    if (elements.discardSnapshotBtn) {
+      elements.discardSnapshotBtn.addEventListener('click', retakeSnapshot);
+    }
     if (elements.cameraUploadFallbackBtn) {
       elements.cameraUploadFallbackBtn.addEventListener('click', () => {
         closeCameraModal();
@@ -1889,7 +1939,7 @@
     const ta = elements.messageInput;
     ta.style.height = 'auto';
     const computedHeight = ta.scrollHeight;
-    ta.style.height = Math.min(Math.max(computedHeight, 24), 120) + 'px';
+    ta.style.height = Math.min(Math.max(computedHeight, 28), 160) + 'px';
   }
 
   function scrollToBottom() {

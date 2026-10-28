@@ -344,15 +344,33 @@
 
           <!-- Left Input Tools -->
           <div class="input-actions-left">
-            <!-- Attach File Button -->
-            <button id="attachFileBtn" class="dock-btn" title="Attach Image or Document (PNG, JPG, PDF, TXT)" aria-label="Attach File">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
-              </svg>
-            </button>
+            <!-- Compact Attachment Menu Popover Wrapper -->
+            <div class="attach-menu-wrapper" id="attachMenuWrapper">
+              <button id="attachFileBtn" class="dock-btn" title="Add Attachment (Photo, Image, or Document)" aria-label="Add Attachment">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                </svg>
+              </button>
 
-            <!-- Live Camera Button -->
-            <button id="cameraBtn" class="dock-btn" title="Capture from Webcam" aria-label="Live Camera">
+              <!-- Compact Attachment Menu (Take Photo, Upload Image, Attach File) -->
+              <div id="attachMenuDropdown" class="attach-menu-dropdown hidden" role="menu">
+                <button id="menuTakePhotoBtn" class="attach-menu-item" type="button" role="menuitem">
+                  <span class="attach-menu-icon">📷</span>
+                  <span>Take Photo</span>
+                </button>
+                <button id="menuUploadImageBtn" class="attach-menu-item" type="button" role="menuitem">
+                  <span class="attach-menu-icon">🖼️</span>
+                  <span>Upload Image</span>
+                </button>
+                <button id="menuAttachFileBtn" class="attach-menu-item" type="button" role="menuitem">
+                  <span class="attach-menu-icon">📄</span>
+                  <span>Attach File</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Live Camera Button Direct Shortcut -->
+            <button id="cameraBtn" class="dock-btn" title="Open Camera Snapshot" aria-label="Live Camera">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
                 <circle cx="12" cy="13" r="4"></circle>
@@ -442,13 +460,16 @@
           <button id="cancelCameraBtn" class="btn btn-secondary btn-sm">Cancel</button>
         </div>
 
-        <!-- Snapshot Review / Confirm Controls -->
+        <!-- Snapshot Review / Confirm Controls (Retake, Remove, and Use Photo) -->
         <div id="cameraPreviewControls" class="camera-controls hidden">
           <button id="confirmSnapshotBtn" class="btn btn-primary btn-sm" title="Use this photo">
             <span>✓ Use Photo</span>
           </button>
           <button id="retakeSnapshotBtn" class="btn btn-secondary btn-sm" title="Retake photo">
             <span>↺ Retake</span>
+          </button>
+          <button id="discardSnapshotBtn" class="btn btn-danger btn-sm" title="Remove and discard captured photo">
+            <span>✕ Remove</span>
           </button>
         </div>
       </div>

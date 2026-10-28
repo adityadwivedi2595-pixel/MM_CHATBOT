@@ -190,11 +190,28 @@ app.post('/api/generate-image', async (req, res) => {
   }
 
   // Engine 2: High-Speed Neural Generator (Pollinations Flux / SDXL AI)
-  // Generates stunning photorealistic & artistic images in ~1.5 - 3 seconds with zero quota restrictions
+  // Respects requested aspect ratio (16:9, 9:16, 4:3, 1:1), lighting, composition, and style
   try {
+    let width = 1024;
+    let height = 1024;
+    const pLower = cleanPrompt.toLowerCase();
+    if (/\b(16:9|widescreen|landscape|banner|horizontal|wide)\b/i.test(pLower)) {
+      width = 1280;
+      height = 720;
+    } else if (/\b(9:16|portrait|vertical|story|phone\s*wallpaper|tall)\b/i.test(pLower)) {
+      width = 720;
+      height = 1280;
+    } else if (/\b(4:3)\b/i.test(pLower)) {
+      width = 1024;
+      height = 768;
+    } else if (/\b(3:4)\b/i.test(pLower)) {
+      width = 768;
+      height = 1024;
+    }
+
     const seed = Math.floor(Math.random() * 10000000);
     const encoded = encodeURIComponent(cleanPrompt);
-    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&nologo=true&seed=${seed}`;
+    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&nologo=true&seed=${seed}`;
 
     const pollResponse = await fetch(pollinationsUrl, { signal: AbortSignal.timeout(28000) });
     if (pollResponse.ok) {
@@ -207,7 +224,7 @@ app.post('/api/generate-image', async (req, res) => {
           mimeType,
           data: base64Data
         }],
-        text: `🎨 **AI Generated Artwork:** *"${cleanPrompt}"*\n\n*(High-Definition 1024×1024 Neural Generation)*`
+        text: `🎨 **AI Generated Artwork:** *"${cleanPrompt}"*\n\n*(High-Definition ${width}×${height} Neural Generation)*`
       });
     }
   } catch (pollErr) {

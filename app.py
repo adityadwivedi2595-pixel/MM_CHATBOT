@@ -177,9 +177,25 @@ async def generate_image(req: ImageGenerationRequest):
 
     # 2. Neural Pollinations Flux Engine Fallback (Instant, Zero Quota Failure)
     try:
+        width = 1024
+        height = 1024
+        p_lower = clean_prompt.lower()
+        if any(w in p_lower for w in ["16:9", "widescreen", "landscape", "banner", "horizontal", "wide"]):
+            width = 1280
+            height = 720
+        elif any(w in p_lower for w in ["9:16", "portrait", "vertical", "story", "wallpaper", "tall"]):
+            width = 720
+            height = 1280
+        elif "4:3" in p_lower:
+            width = 1024
+            height = 768
+        elif "3:4" in p_lower:
+            width = 768
+            height = 1024
+
         seed = random.randint(1000, 9999999)
         encoded_prompt = urllib.parse.quote(clean_prompt)
-        poll_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&seed={seed}"
+        poll_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={width}&height={height}&nologo=true&seed={seed}"
         async with httpx.AsyncClient(timeout=28.0) as client:
             poll_resp = await client.get(poll_url)
             if poll_resp.status_code == 200:
@@ -187,7 +203,7 @@ async def generate_image(req: ImageGenerationRequest):
                 mime_type = poll_resp.headers.get("content-type", "image/jpeg")
                 return {
                     "images": [{"mimeType": mime_type, "data": b64_img}],
-                    "text": f"🎨 **AI Generated Artwork:** *\"{clean_prompt}\"*\n\n*(High-Definition 1024×1024 Neural Generation)*"
+                    "text": f"🎨 **AI Generated Artwork:** *\"{clean_prompt}\"*\n\n*(High-Definition {width}×{height} Neural Generation)*"
                 }
     except Exception as poll_e:
         print(f"[WARN] Pollinations neural generation error: {poll_e}")
