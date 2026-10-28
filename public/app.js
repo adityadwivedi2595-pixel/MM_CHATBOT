@@ -35,6 +35,9 @@
   let waveformAnimId = null;
   let recordingStartTime = 0;
   let recordingTimerInterval = null;
+  let silenceAutoSendTimer = null;
+  const SILENCE_AUTO_SEND_DELAY = 1600; // 1.6s pause after speaking triggers automatic send
+  let hasDetectedSpeechInSession = false;
 
   // Camera state
   let cameraStream = null;
@@ -98,6 +101,8 @@
     voiceWaveformContainer: document.getElementById('voiceWaveformContainer'),
     waveformCanvas: document.getElementById('waveformCanvas'),
     recordingTimer: document.getElementById('recordingTimer'),
+    recordingStatusText: document.getElementById('recordingStatusText'),
+    cancelVoiceBtn: document.getElementById('cancelVoiceBtn'),
     stopVoiceBtn: document.getElementById('stopVoiceBtn'),
 
     // Attachments & Input
@@ -920,13 +925,36 @@
       speechRecognition.lang = 'en-US';
 
       speechRecognition.onresult = function (event) {
-        let transcript = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
+        let fullTranscript = '';
+        for (let i = 0; i < event.results.length; i++) {
+          fullTranscript += event.results[i][0].transcript + ' ';
         }
-        if (transcript.trim()) {
-          elements.messageInput.value = transcript;
+        const text = fullTranscript.trim();
+        if (text) {
+          elements.messageInput.value = text;
           autoResizeTextarea();
+          hasDetectedSpeechInSession = true;
+
+          // Visual feedback that speech was recognized
+          if (elements.recordingStatusText) {
+            elements.recordingStatusText.textContent = 'Hearing you... (will auto-send when you pause)';
+            elements.recordingStatusText.className = 'recording-text recording-status-active';
+          }
+
+          // Clear previous silence timer and start fresh silence countdown
+          if (silenceAutoSendTimer) {
+            clearTimeout(silenceAutoSendTimer);
+          }
+          silenceAutoSendTimer = setTimeout(() => {
+            if (isRecordingVoice && hasDetectedSpeechInSession && elements.messageInput.value.trim()) {
+              if (elements.recordingStatusText) {
+                elements.recordingStatusText.textContent = 'Done listening! Working on your question...';
+                elements.recordingStatusText.className = 'recording-text recording-status-sending';
+              }
+              // Automatically stop recording and send question!
+              stopVoiceRecording(true);
+            }
+          }, SILENCE_AUTO_SEND_DELAY);
         }
       };
 
@@ -936,7 +964,12 @@
 
       speechRecognition.onend = function () {
         if (isRecordingVoice) {
-          stopVoiceRecording();
+          // If speech was recorded and microphone ended, auto-submit
+          if (hasDetectedSpeechInSession && elements.messageInput.value.trim()) {
+            stopVoiceRecording(true);
+          } else {
+            stopVoiceRecording(false);
+          }
         }
       };
     }
@@ -944,7 +977,8 @@
 
   async function toggleVoiceRecording() {
     if (isRecordingVoice) {
-      stopVoiceRecording();
+      // Tapping mic while recording stops and immediately sends
+      stopVoiceRecording(true);
     } else {
       await startVoiceRecording();
     }
@@ -960,8 +994,24 @@
       source.connect(audioAnalyser);
 
       isRecordingVoice = true;
+      hasDetectedSpeechInSession = false;
+      if (silenceAutoSendTimer) {
+        clearTimeout(silenceAutoSendTimer);
+        silenceAutoSendTimer = null;
+      }
+
+      if (elements.recordingStatusText) {
+        elements.recordingStatusText.textContent = 'Listening... Speak your question';
+        elements.recordingStatusText.className = 'recording-text';
+      }
+
       elements.micBtn.classList.add('recording');
       elements.voiceWaveformContainer.classList.remove('hidden');
+
+      // Stop any running speech synthesis so bot doesn't talk over the user
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
 
       recordingStartTime = Date.now();
       updateRecordingTimer();
@@ -977,7 +1027,14 @@
     }
   }
 
-  function stopVoiceRecording() {
+  function stopVoiceRecording(shouldSend = false) {
+    if (silenceAutoSendTimer) {
+      clearTimeout(silenceAutoSendTimer);
+      silenceAutoSendTimer = null;
+    }
+    const hadSpeech = hasDetectedSpeechInSession;
+    hasDetectedSpeechInSession = false;
+
     isRecordingVoice = false;
     elements.micBtn.classList.remove('recording');
     elements.voiceWaveformContainer.classList.add('hidden');
@@ -1004,6 +1061,11 @@
     if (audioContext && audioContext.state !== 'closed') {
       audioContext.close();
       audioContext = null;
+    }
+
+    // Automatically send the question and start generating answer
+    if (shouldSend && elements.messageInput.value.trim()) {
+      sendMessage();
     }
   }
 
@@ -1320,9 +1382,17 @@
     elements.cancelCameraBtn.addEventListener('click', closeCameraModal);
     elements.captureSnapshotBtn.addEventListener('click', captureSnapshot);
 
-    // Voice Dictation
+    // Voice Dictation & Hands-Free Auto-Send
     elements.micBtn.addEventListener('click', toggleVoiceRecording);
-    elements.stopVoiceBtn.addEventListener('click', stopVoiceRecording);
+    if (elements.stopVoiceBtn) {
+      elements.stopVoiceBtn.addEventListener('click', () => stopVoiceRecording(true));
+    }
+    if (elements.cancelVoiceBtn) {
+      elements.cancelVoiceBtn.addEventListener('click', () => {
+        elements.messageInput.value = '';
+        stopVoiceRecording(false);
+      });
+    }
 
     // Settings Modal
     elements.openSettingsBtn.addEventListener('click', () => openModal(elements.settingsModal));

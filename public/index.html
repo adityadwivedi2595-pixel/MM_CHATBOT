@@ -268,11 +268,14 @@
       <div id="voiceWaveformContainer" class="voice-waveform-container hidden">
         <div class="waveform-info">
           <div class="recording-pulsar"></div>
-          <span class="recording-text">Listening... Speak now</span>
+          <span id="recordingStatusText" class="recording-text">Listening... Speak your question</span>
           <span id="recordingTimer" class="recording-timer">00:00</span>
         </div>
         <canvas id="waveformCanvas" class="waveform-canvas" width="400" height="40"></canvas>
-        <button id="stopVoiceBtn" class="btn btn-danger btn-sm">Stop & Send</button>
+        <div class="voice-actions-group">
+          <button id="cancelVoiceBtn" class="btn btn-secondary btn-sm" title="Cancel voice">Cancel</button>
+          <button id="stopVoiceBtn" class="btn btn-primary btn-sm" title="Send now">Send Now</button>
+        </div>
       </div>
 
       <!-- Attachment Preview Ribbon (Shown above textarea when files are attached) -->
