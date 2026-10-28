@@ -1,6 +1,6 @@
 # 🌌 MM CHATBOT — Next-Gen Multimodal AI Assistant
 
-A high-performance, full-stack Multimodal AI Chatbot powered by Google Gemini (Gemini 3.5 Flash, Gemini 3.8 Flash, Gemini 3.5 Flash Lite & Gemini 3.1 Pro) with native support for **Text**, **Vision & Images**, **Live Camera Snapshots**, **Voice Dictation**, **Audio Waveforms**, **Text-to-Speech (TTS)**, and **Document Intelligence**.
+A high-performance, full-stack Multimodal AI Chatbot powered by Google Gemini (Gemini 3.5 Flash, Gemini 3.8 Flash, Gemini 3.5 Flash Lite & Gemini 3.1 Pro) with native support for **Text**, **Image Generation**, **Vision & Images**, **Live Camera Snapshots**, **Voice Dictation**, **Audio Waveforms**, **Text-to-Speech (TTS)**, and **Document Intelligence**.
 
 ![MM Chatbot Avatar](public/assets/avatar.jpg)
 
@@ -9,6 +9,7 @@ A high-performance, full-stack Multimodal AI Chatbot powered by Google Gemini (G
 ## ⚡ Core Features
 
 - 🖼️ **Vision & Image Understanding**: Drag and drop images (PNG, JPEG, WEBP) or screenshots directly into the chat for detailed structural, aesthetic, and OCR analysis. Click any image to view it full screen in the lightbox.
+- 🎨 **Image Generation**: Choose **Generate Image** or ask the chatbot to create an image from a prompt. Generated images appear in the conversation with a download link; optional JPEG, PNG, and WEBP reference images can guide generation.
 - 📷 **Live Camera Snapshot**: Capture real-world photos directly from your webcam with a single tap and analyze them instantly.
 - 🎙️ **Voice & Audio Dictation**: Speech-to-text recognition with a real-time reactive soundwave frequency visualizer.
 - 🔊 **Text-to-Speech (TTS) Readout**: Listen to assistant responses in natural spoken voices with customizable pitch, speed, and auto-read toggle.
@@ -30,6 +31,8 @@ GEMINI_API_KEY=your_gemini_api_key_here
 PORT=3000
 ```
 *(Get a free key from [Google AI Studio](https://aistudio.google.com/app/apikey))*
+
+Image generation uses Gemini's `gemini-nano-banana-2.1` model through the Interactions API and requires a Gemini API key with access to that model. Image-generation availability and quotas depend on the Google AI project; the chatbot displays the provider's error if image generation is not enabled for the key.
 
 ### 2A. Run with Node.js (Production Server)
 ```bash

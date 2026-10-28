@@ -13,6 +13,8 @@
     SETTINGS: 'mm_chatbot_settings_v1',
     THEME: 'mm_chatbot_theme_v1'
   };
+  const GENERATED_IMAGE_DB = 'mm_chatbot_generated_images_v1';
+  const GENERATED_IMAGE_STORE = 'images';
 
   // Base API URL: when launched directly via file:/// protocol, proxy to localhost:3000
   const API_BASE = (window.location.protocol === 'file:') ? 'http://localhost:3000' : '';
@@ -22,6 +24,7 @@
   let currentChatId = null;
   let pendingAttachments = []; // Array of { name, mimeType, size, data (base64) }
   let isGenerating = false;
+  let imageGenerationMode = false;
   let abortController = null;
   let activeAudioUtterance = null;
   let availableVoices = [];
@@ -45,7 +48,7 @@
   // Default Settings
   const defaultSettings = {
     apiKey: '',
-    model: 'gemini-3.5-flash',
+    model: 'gemini-3.5-flash-lite',
     systemPromptPreset: 'general',
     customSystemPrompt: '',
     temperature: 0.7,
@@ -121,11 +124,21 @@
     stopControlWrapper: document.getElementById('stopControlWrapper'),
     dragDropOverlay: document.getElementById('dragDropOverlay'),
 
-    // Camera Modal
+    // Camera Modal (Universal Device & Mobile Compatible)
     cameraModal: document.getElementById('cameraModal'),
     cameraVideo: document.getElementById('cameraVideo'),
     cameraCanvas: document.getElementById('cameraCanvas'),
+    cameraSnapshotPreview: document.getElementById('cameraSnapshotPreview'),
+    cameraFallbackBanner: document.getElementById('cameraFallbackBanner'),
+    cameraFallbackText: document.getElementById('cameraFallbackText'),
+    cameraUploadFallbackBtn: document.getElementById('cameraUploadFallbackBtn'),
+    cameraLiveControls: document.getElementById('cameraLiveControls'),
+    cameraPreviewControls: document.getElementById('cameraPreviewControls'),
     captureSnapshotBtn: document.getElementById('captureSnapshotBtn'),
+    flipCameraBtn: document.getElementById('flipCameraBtn'),
+    flipCameraBtnMobile: document.getElementById('flipCameraBtnMobile'),
+    confirmSnapshotBtn: document.getElementById('confirmSnapshotBtn'),
+    retakeSnapshotBtn: document.getElementById('retakeSnapshotBtn'),
     cancelCameraBtn: document.getElementById('cancelCameraBtn'),
     closeCameraModalBtn: document.getElementById('closeCameraModalBtn'),
 
@@ -308,12 +321,24 @@
   /* ==========================================================================
      Conversations Management
      ========================================================================== */
-  function loadConversations() {
+  async function loadConversations() {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.CONVERSATIONS);
       conversations = saved ? JSON.parse(saved) : [];
     } catch (e) {
       conversations = [];
+    }
+
+    try {
+      await Promise.all(conversations.flatMap(chat => (chat.messages || []).flatMap(message =>
+        (message.generatedImages || []).map(async image => {
+          if (image.id && !image.dataUrl) {
+            image.dataUrl = await readGeneratedImage(image.id);
+          }
+        })
+      )));
+    } catch (error) {
+      console.warn('Could not restore generated images from browser storage:', error);
     }
 
     currentChatId = localStorage.getItem(STORAGE_KEYS.ACTIVE_CHAT_ID);
@@ -331,8 +356,70 @@
   }
 
   function saveConversations() {
-    localStorage.setItem(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(conversations));
+    const savedConversations = JSON.stringify(conversations, (key, value) => {
+      if (key === 'dataUrl' && typeof value === 'string' && value.startsWith('data:image/')) {
+        return undefined;
+      }
+      return value;
+    });
+    try {
+      localStorage.setItem(STORAGE_KEYS.CONVERSATIONS, savedConversations);
+    } catch (storageError) {
+      const lightweightConversations = JSON.stringify(conversations, (key, value) => {
+        if (
+          (key === 'dataUrl' || key === 'data')
+          && typeof value === 'string'
+          && value.startsWith('data:image/')
+        ) {
+          return undefined;
+        }
+        return value;
+      });
+      try {
+        localStorage.setItem(STORAGE_KEYS.CONVERSATIONS, lightweightConversations);
+      } catch (retryError) {
+        console.error('Could not save chat history in browser storage:', retryError);
+        throw retryError;
+      }
+    }
     localStorage.setItem(STORAGE_KEYS.ACTIVE_CHAT_ID, currentChatId);
+  }
+
+  function openGeneratedImageDatabase() {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) {
+        reject(new Error('Browser image storage is unavailable.'));
+        return;
+      }
+      const request = window.indexedDB.open(GENERATED_IMAGE_DB, 1);
+      request.onupgradeneeded = () => {
+        request.result.createObjectStore(GENERATED_IMAGE_STORE, { keyPath: 'id' });
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error('Could not open browser image storage.'));
+    });
+  }
+
+  async function storeGeneratedImage(id, dataUrl) {
+    const database = await openGeneratedImageDatabase();
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction(GENERATED_IMAGE_STORE, 'readwrite');
+      transaction.objectStore(GENERATED_IMAGE_STORE).put({ id, dataUrl });
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error || new Error('Could not save generated image.'));
+      transaction.onabort = () => reject(transaction.error || new Error('Saving the generated image was aborted.'));
+    });
+  }
+
+  async function readGeneratedImage(id) {
+    const database = await openGeneratedImageDatabase();
+    return new Promise((resolve, reject) => {
+      const request = database.transaction(GENERATED_IMAGE_STORE, 'readonly')
+        .objectStore(GENERATED_IMAGE_STORE)
+        .get(id);
+      request.onsuccess = () => resolve(request.result?.dataUrl || '');
+      request.onerror = () => reject(request.error || new Error('Could not restore generated image.'));
+    });
   }
 
   function createNewConversation(shouldSave = true) {
@@ -467,9 +554,24 @@
       `;
     } else {
       const parsedMarkdown = renderMarkdown(msg.content || '');
+      const availableImages = Array.isArray(msg.generatedImages)
+        ? msg.generatedImages.filter(image => image.dataUrl)
+        : [];
+      const generatedImagesHtml = availableImages.length > 0
+        ? `<div class="generated-image-gallery">${availableImages.map((image, imageIndex) => {
+          const extension = image.mimeType === 'image/png' ? 'png' : image.mimeType === 'image/webp' ? 'webp' : 'jpg';
+          return `
+            <div class="generated-image-item">
+              <img src="${escapeHtml(image.dataUrl)}" alt="Generated image ${imageIndex + 1}" class="generated-image-preview" title="Click to expand">
+              <a class="generated-image-download" href="${escapeHtml(image.dataUrl)}" download="mm-chatbot-image-${imageIndex + 1}.${extension}">Download image</a>
+            </div>
+          `;
+        }).join('')}</div>`
+        : '';
       bubbleContent = `
         <div class="message-bubble-assistant">
           <div class="bubble-markdown-body">${parsedMarkdown}</div>
+          ${generatedImagesHtml}
         </div>
         <div class="message-actions-row">
           <button class="msg-action-btn speak-btn" title="Read Aloud" data-content="${escapeHtml(msg.content)}">
@@ -500,6 +602,9 @@
 
     // Attach Lightbox click on user image attachments
     row.querySelectorAll('.msg-attachment-img').forEach(img => {
+      img.addEventListener('click', () => openLightbox(img.src));
+    });
+    row.querySelectorAll('.generated-image-preview').forEach(img => {
       img.addEventListener('click', () => openLightbox(img.src));
     });
 
@@ -581,6 +686,11 @@
 
     const text = elements.messageInput.value.trim();
     if (!text && pendingAttachments.length === 0) return;
+    if (imageGenerationMode || isImageGenerationRequest(text)) {
+      imageGenerationMode = false;
+      await generateImage(text);
+      return;
+    }
 
     let chat = getActiveConversation();
     if (!chat) {
@@ -630,6 +740,10 @@
 
     // Create live streaming row
     const streamRow = createStreamRowDOM(assistantIndex);
+    const streamBody = streamRow.querySelector('.bubble-markdown-body');
+    if (streamBody) {
+      streamBody.innerHTML = `<em>🎨 Generating artwork for <strong>"${escapeHtml(text)}"</strong> with Neural AI Studio...</em>`;
+    }
     elements.messagesList.appendChild(streamRow);
     scrollToBottom();
 
@@ -644,12 +758,19 @@
         ? settings.customSystemPrompt
         : (SYSTEM_PERSONAS[settings.systemPromptPreset] || SYSTEM_PERSONAS.general);
 
-      // Clean prior failed error blocks from conversation history to avoid 400 Bad Request
-      const cleanHistory = chat.messages.slice(0, -1).filter(m => {
-        if (!m || !m.content) return false;
-        if (m.content.includes('> ⚠️ **Request Failed:') || m.content.includes('> ⚠️ **Error:')) return false;
-        return true;
-      });
+      // High-speed history trimming: Keep last 10 turns and omit heavy base64 data from older messages
+      // This reduces payload from megabytes to kilobytes, cutting latency dramatically!
+      const recentMessages = chat.messages.slice(0, -1).slice(-10);
+      const cleanHistory = recentMessages
+        .filter(m => {
+          if (!m || !m.content) return false;
+          if (m.content.includes('> ⚠️ **Request Failed:') || m.content.includes('> ⚠️ **Error:')) return false;
+          return true;
+        })
+        .map(m => ({
+          role: m.role,
+          content: m.content
+        }));
 
       const response = await fetch(API_BASE + '/api/chat', {
         method: 'POST',
@@ -669,7 +790,7 @@
         throw new Error(`Server returned HTTP ${response.status}`);
       }
 
-      // Stream SSE
+      // Stream SSE with ultra-fluid frame scheduling
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
@@ -677,6 +798,18 @@
 
       const markdownBody = streamRow.querySelector('.bubble-markdown-body');
       const cursor = streamRow.querySelector('.streaming-cursor');
+
+      let renderScheduled = false;
+      function scheduleStreamRender() {
+        if (!renderScheduled) {
+          renderScheduled = true;
+          requestAnimationFrame(() => {
+            markdownBody.innerHTML = renderMarkdown(fullContent);
+            scrollToBottom();
+            renderScheduled = false;
+          });
+        }
+      }
 
       while (true) {
         if (!isGenerating) {
@@ -701,12 +834,12 @@
               if (data.type === 'chunk' && data.text) {
                 fullContent += data.text;
                 assistantMessage.content = fullContent;
-                markdownBody.innerHTML = renderMarkdown(fullContent);
-                scrollToBottom();
+                scheduleStreamRender();
               } else if (data.type === 'error') {
                 fullContent += `\n\n> ⚠️ **Error:** ${data.error}`;
                 assistantMessage.content = fullContent;
                 markdownBody.innerHTML = renderMarkdown(fullContent);
+                scrollToBottom();
               }
             } catch (err) {
               // ignore parse errors
@@ -739,6 +872,132 @@
       streamRow.remove();
       appendMessageToDOM(assistantMessage, assistantIndex);
     } finally {
+      setGeneratingState(false);
+      abortController = null;
+    }
+  }
+
+  function isImageGenerationRequest(text) {
+    if (!text || typeof text !== 'string') return false;
+    const t = text.toLowerCase().trim();
+
+    // Direct command prefixes
+    if (/^(generate|create|make|draw|paint|render|design)\s+(an?\s+)?(image|picture|photo|illustration|art|artwork|wallpaper|logo|drawing)/i.test(t)) return true;
+    if (/^(draw|paint)\s+(a|an|me|the)?\s+/i.test(t)) return true;
+    if (/\b(image\s*generation|generate\s*image|photo\s*generate|draw\s*image|picture\s*generate|make\s*image)\b/i.test(t)) return true;
+    if (/\b(generate|create|make|draw|design|paint)\b.*\b(image|picture|photo|illustration|artwork|wallpaper|drawing)\b/i.test(t)) return true;
+
+    // Multilingual & Roman Hindi support
+    const imageWords = /\b(?:image|picture|photo|photograph|illustration|artwork|wallpaper|poster|logo|thumbnail|icon|tasveer|tasvir)\b|तस्वीर|तसवीर|फोटो|चित्र|छवि|इमेज/i;
+    const generationWords = /\b(?:generate|create|make|draw|design|paint|illustrate|render|bana(?:o|do)?|bna(?:o|do)?|karo|kar\s+do|want|need|show\s+me)\b|बनाओ|बना\s*दो|बनादो|तैयार\s*करो/i;
+    return imageWords.test(t) && generationWords.test(t);
+  }
+
+  async function generateImage(prompt) {
+    if (isGenerating) return;
+
+    const text = prompt.trim();
+    if (!text && pendingAttachments.length === 0) {
+      elements.messageInput.focus();
+      return;
+    }
+
+    let chat = getActiveConversation();
+    if (!chat) {
+      createNewConversation();
+      chat = getActiveConversation();
+    }
+    if (!chat) return;
+
+    const attachments = [...pendingAttachments];
+    const userMessage = {
+      role: 'user',
+      content: text,
+      attachments,
+      timestamp: new Date().toISOString()
+    };
+    if (chat.title === 'New Conversation') {
+      chat.title = text.slice(0, 32) || 'Image Generation';
+      elements.currentChatTitle.textContent = chat.title;
+      renderConversationsList();
+    }
+
+    chat.messages.push(userMessage);
+    saveConversations();
+    elements.welcomeScreen.classList.add('hidden');
+    appendMessageToDOM(userMessage, chat.messages.length - 1);
+    elements.messageInput.value = '';
+    elements.messageInput.style.height = 'auto';
+    clearPendingAttachments();
+
+    const assistantIndex = chat.messages.length;
+    const assistantMessage = {
+      role: 'assistant',
+      content: '',
+      generatedImages: [],
+      timestamp: new Date().toISOString()
+    };
+    chat.messages.push(assistantMessage);
+
+    const streamRow = createStreamRowDOM(assistantIndex);
+    const streamBody = streamRow.querySelector('.bubble-markdown-body');
+    if (streamBody) {
+      streamBody.innerHTML = `<em>🎨 Generating artwork for <strong>"${escapeHtml(text)}"</strong> with Neural AI Studio...</em>`;
+    }
+    elements.messagesList.appendChild(streamRow);
+    scrollToBottom();
+    setGeneratingState(true);
+    abortController = new AbortController();
+
+    try {
+      const response = await fetch(API_BASE + '/api/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: abortController.signal,
+        body: JSON.stringify({
+          prompt: text,
+          apiKey: settings.apiKey,
+          attachments
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || data.detail || `Server returned HTTP ${response.status}`);
+      }
+
+      assistantMessage.generatedImages = await Promise.all(data.images.map(async image => {
+        const generatedImage = {
+          id: `generated_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+          mimeType: image.mimeType,
+          dataUrl: `data:${image.mimeType};base64,${image.data}`
+        };
+        try {
+          await storeGeneratedImage(generatedImage.id, generatedImage.dataUrl);
+        } catch (storageError) {
+          console.warn('Generated image could not be saved for future sessions:', storageError);
+        }
+        return generatedImage;
+      }));
+      assistantMessage.content = data.text || 'Here is your generated image.';
+      if (assistantMessage.generatedImages.length === 0) {
+        throw new Error('The image service returned no images. Please try a different prompt.');
+      }
+    } catch (err) {
+      assistantMessage.content = err.name === 'AbortError'
+        ? 'Image generation was stopped.'
+        : `> ⚠️ **Image generation failed:** ${err.message}`;
+    } finally {
+      imageGenerationMode = false;
+      elements.messageInput.placeholder = 'Ask anything, drag images/docs, or dictate voice...';
+      streamRow.remove();
+      try {
+        saveConversations();
+      } catch (storageError) {
+        assistantMessage.content += '\n\n> ⚠️ **Storage warning:** This image is visible now, but this browser could not save the chat history.';
+        console.error('Could not save generated image conversation:', storageError);
+      }
+      appendMessageToDOM(assistantMessage, assistantIndex);
+      scrollToBottom();
       setGeneratingState(false);
       abortController = null;
     }
@@ -869,44 +1128,136 @@
   }
 
   /* ==========================================================================
-     Camera Snapshot Capture Modal
+     Camera Snapshot Capture Modal (Universal Cross-Device Compatible)
      ========================================================================== */
+  let currentFacingMode = 'user'; // 'user' (front / selfie) or 'environment' (rear / world)
+  let pendingSnapshotDataUrl = null;
+
+  async function startCameraStream() {
+    if (cameraStream) {
+      try {
+        cameraStream.getTracks().forEach(track => track.stop());
+      } catch (e) {}
+      cameraStream = null;
+    }
+
+    if (elements.cameraFallbackBanner) elements.cameraFallbackBanner.classList.add('hidden');
+    if (elements.cameraSnapshotPreview) {
+      elements.cameraSnapshotPreview.classList.add('hidden');
+      elements.cameraSnapshotPreview.src = '';
+    }
+    if (elements.cameraLiveControls) elements.cameraLiveControls.classList.remove('hidden');
+    if (elements.cameraPreviewControls) elements.cameraPreviewControls.classList.add('hidden');
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showCameraFallback('Camera access is not supported by your browser or connection. You can attach a photo from your files.');
+      return;
+    }
+
+    // Progressive constraint fallback to guarantee 100% compatibility across all phones, tablets, and desktops
+    const constraintAttempts = [
+      { video: { facingMode: { ideal: currentFacingMode }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+      { video: { facingMode: currentFacingMode } },
+      { video: true }
+    ];
+
+    let lastError = null;
+    for (const constraints of constraintAttempts) {
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+        elements.cameraVideo.srcObject = cameraStream;
+        await elements.cameraVideo.play().catch(() => {});
+        return;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    const isDenied = lastError && (lastError.name === 'NotAllowedError' || lastError.name === 'PermissionDeniedError');
+    showCameraFallback(
+      isDenied
+        ? 'Camera permission was blocked. Please enable camera access in your browser or select an image file.'
+        : `Camera unavailable (${lastError?.message || 'Device in use'}). Choose a photo from your files instead.`
+    );
+  }
+
+  function showCameraFallback(msg) {
+    if (elements.cameraFallbackText) elements.cameraFallbackText.textContent = msg;
+    if (elements.cameraFallbackBanner) elements.cameraFallbackBanner.classList.remove('hidden');
+    if (elements.cameraLiveControls) elements.cameraLiveControls.classList.add('hidden');
+  }
+
   async function openCameraModal() {
     elements.cameraModal.classList.remove('hidden');
-    try {
-      cameraStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
-      });
-      elements.cameraVideo.srcObject = cameraStream;
-    } catch (err) {
-      alert('Could not access camera: ' + err.message);
-      closeCameraModal();
-    }
+    await startCameraStream();
   }
 
   function closeCameraModal() {
     if (cameraStream) {
-      cameraStream.getTracks().forEach(track => track.stop());
+      try {
+        cameraStream.getTracks().forEach(track => track.stop());
+      } catch (e) {}
       cameraStream = null;
+    }
+    pendingSnapshotDataUrl = null;
+    if (elements.cameraSnapshotPreview) {
+      elements.cameraSnapshotPreview.classList.add('hidden');
+      elements.cameraSnapshotPreview.src = '';
     }
     elements.cameraModal.classList.add('hidden');
   }
 
+  async function toggleCameraFacing() {
+    currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+    await startCameraStream();
+  }
+
   function captureSnapshot() {
-    if (!elements.cameraVideo.videoWidth) return;
+    const video = elements.cameraVideo;
+    const w = video.videoWidth || 640;
+    const h = video.videoHeight || 480;
 
     const canvas = elements.cameraCanvas;
-    canvas.width = elements.cameraVideo.videoWidth;
-    canvas.height = elements.cameraVideo.videoHeight;
+    canvas.width = w;
+    canvas.height = h;
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(elements.cameraVideo, 0, 0, canvas.width, canvas.height);
 
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    // Flip horizontal if front-facing user camera for natural mirror reflection
+    if (currentFacingMode === 'user') {
+      ctx.translate(w, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(video, 0, 0, w, h);
+
+    pendingSnapshotDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+
+    // Show preview controls so user can confirm or retake
+    if (elements.cameraSnapshotPreview) {
+      elements.cameraSnapshotPreview.src = pendingSnapshotDataUrl;
+      elements.cameraSnapshotPreview.classList.remove('hidden');
+    }
+    if (elements.cameraLiveControls) elements.cameraLiveControls.classList.add('hidden');
+    if (elements.cameraPreviewControls) elements.cameraPreviewControls.classList.remove('hidden');
+  }
+
+  function retakeSnapshot() {
+    pendingSnapshotDataUrl = null;
+    if (elements.cameraSnapshotPreview) {
+      elements.cameraSnapshotPreview.classList.add('hidden');
+      elements.cameraSnapshotPreview.src = '';
+    }
+    if (elements.cameraLiveControls) elements.cameraLiveControls.classList.remove('hidden');
+    if (elements.cameraPreviewControls) elements.cameraPreviewControls.classList.add('hidden');
+  }
+
+  function confirmSnapshot() {
+    if (!pendingSnapshotDataUrl) return;
+
     pendingAttachments.push({
-      name: `Snapshot_${new Date().toISOString().slice(11, 19).replace(/:/g, '-')}.jpg`,
+      name: `Camera_${new Date().toISOString().slice(11, 19).replace(/:/g, '-')}.jpg`,
       mimeType: 'image/jpeg',
-      size: Math.round(dataUrl.length * 0.75),
-      data: dataUrl
+      size: Math.round(pendingSnapshotDataUrl.length * 0.75),
+      data: pendingSnapshotDataUrl
     });
 
     renderAttachmentRibbon();
@@ -1287,6 +1638,10 @@
         if (action === 'image' || action === 'file') elements.fileInput.click();
         else if (action === 'camera') openCameraModal();
         else if (action === 'voice') toggleVoiceRecording();
+        else if (action === 'generate-image') {
+          imageGenerationMode = true;
+          elements.messageInput.placeholder = 'Describe the image you want to create...';
+        }
       });
     });
 
@@ -1324,6 +1679,12 @@
             autoResizeTextarea();
           } else if (mode === 'vision') {
             elements.fileInput.click();
+          } else if (mode === 'generate-image') {
+            imageGenerationMode = true;
+            elements.messageInput.placeholder = 'Describe the image you want to create...';
+            elements.messageInput.value = 'Create an image of: ';
+            elements.messageInput.focus();
+            autoResizeTextarea();
           } else if (mode === 'export') {
             exportCurrentChat();
           }
@@ -1376,11 +1737,21 @@
     });
     elements.clearAllAttachmentsBtn.addEventListener('click', clearPendingAttachments);
 
-    // Camera Modal
+    // Camera Controls (Mobile & Cross-Device)
     elements.cameraBtn.addEventListener('click', openCameraModal);
     elements.closeCameraModalBtn.addEventListener('click', closeCameraModal);
     elements.cancelCameraBtn.addEventListener('click', closeCameraModal);
     elements.captureSnapshotBtn.addEventListener('click', captureSnapshot);
+    if (elements.flipCameraBtn) elements.flipCameraBtn.addEventListener('click', toggleCameraFacing);
+    if (elements.flipCameraBtnMobile) elements.flipCameraBtnMobile.addEventListener('click', toggleCameraFacing);
+    if (elements.confirmSnapshotBtn) elements.confirmSnapshotBtn.addEventListener('click', confirmSnapshot);
+    if (elements.retakeSnapshotBtn) elements.retakeSnapshotBtn.addEventListener('click', retakeSnapshot);
+    if (elements.cameraUploadFallbackBtn) {
+      elements.cameraUploadFallbackBtn.addEventListener('click', () => {
+        closeCameraModal();
+        elements.fileInput.click();
+      });
+    }
 
     // Voice Dictation & Hands-Free Auto-Send
     elements.micBtn.addEventListener('click', toggleVoiceRecording);
@@ -1517,7 +1888,8 @@
   function autoResizeTextarea() {
     const ta = elements.messageInput;
     ta.style.height = 'auto';
-    ta.style.height = Math.min(ta.scrollHeight, 180) + 'px';
+    const computedHeight = ta.scrollHeight;
+    ta.style.height = Math.min(Math.max(computedHeight, 24), 120) + 'px';
   }
 
   function scrollToBottom() {

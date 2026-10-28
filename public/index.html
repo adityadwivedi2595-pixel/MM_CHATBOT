@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MM CHATBOT — Next-Gen Multimodal AI Assistant</title>
-  <meta name="description" content="Experience cutting-edge multimodal AI with vision analysis, voice recording, live camera snapshot, document intelligence, and real-time streaming powered by Google Gemini.">
+  <meta name="description" content="Experience multimodal AI with image generation, vision analysis, voice recording, live camera snapshots, document intelligence, and real-time streaming powered by Google Gemini.">
   <link rel="icon" type="image/jpeg" href="assets/avatar.jpg">
 
   <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
@@ -137,16 +137,16 @@
           </button>
           <div class="chat-title-container">
             <h1 id="currentChatTitle" class="chat-title">New Conversation</h1>
-            <span id="activeModelBadge" class="active-model-badge">Gemini 3.5 Flash</span>
+            <span id="activeModelBadge" class="active-model-badge">Gemini 3.5 Flash Lite ⚡</span>
           </div>
         </div>
 
         <div class="nav-right">
-          <!-- Model Selection Dropdown -->
+          <!-- Model Selection Dropdown (Fastest Flash-Lite Selected by Default) -->
           <div class="model-select-wrapper">
             <select id="modelSelect" class="select-dropdown" aria-label="Select AI Model">
-              <option value="gemini-3.5-flash" selected>Gemini 3.5 Flash</option>
-              <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
+              <option value="gemini-3.5-flash-lite" selected>Gemini 3.5 Flash Lite ⚡</option>
+              <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
               <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
               <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
             </select>
@@ -213,7 +213,7 @@
               <div class="orb-glow-pulse"></div>
             </div>
             <h2 class="hero-heading">What can we discover together?</h2>
-            <p class="hero-subheading">I am <strong>MM CHATBOT</strong>, an advanced multimodal assistant. I can perceive images, transcribe voice audio, summarize documents, and code with deep reasoning.</p>
+            <p class="hero-subheading">I am <strong>MM CHATBOT</strong>, an advanced multimodal assistant. I can generate and understand images, transcribe voice audio, summarize documents, and code with deep reasoning.</p>
           </div>
 
           <!-- Multimodal Starter Cards -->
@@ -223,6 +223,14 @@
               <div class="starter-content">
                 <h4>Analyze an Image</h4>
                 <p>Upload a diagram, photo, UI screenshot, or receipt for instant visual reasoning.</p>
+              </div>
+            </div>
+
+            <div class="starter-card" data-prompt="Create an image of: " data-action="generate-image">
+              <div class="starter-icon-box">🎨</div>
+              <div class="starter-content">
+                <h4>Generate an Image</h4>
+                <p>Describe a scene, character, or idea and create an image from your prompt.</p>
               </div>
             </div>
 
@@ -321,6 +329,9 @@
           <button class="cap-btn" data-mode="vision" title="Upload an image or screenshot for OCR & inspection">
             <span class="cap-icon">🖼️</span> Vision & OCR
           </button>
+          <button class="cap-btn" data-mode="generate-image" title="Generate an image from a text prompt">
+            <span class="cap-icon">🎨</span> Generate Image
+          </button>
           <button class="cap-btn" data-mode="export" title="Export conversation as Markdown file">
             <span class="cap-icon">📥</span> Export
           </button>
@@ -393,28 +404,52 @@
     </main>
   </div>
 
-  <!-- Webcam Capture Modal -->
+  <!-- Webcam & Mobile Camera Capture Modal (Universal Cross-Device Compatible) -->
   <div id="cameraModal" class="modal-overlay hidden">
     <div class="modal-container camera-modal-container">
       <div class="modal-header">
         <div class="modal-title-wrap">
           <span class="modal-icon">📷</span>
-          <h3>Capture Camera Snapshot</h3>
+          <h3>Camera Snapshot</h3>
         </div>
-        <button id="closeCameraModalBtn" class="icon-btn" aria-label="Close modal">✕</button>
+        <div class="modal-header-actions">
+          <button id="flipCameraBtn" class="icon-btn" title="Switch Front/Rear Camera" aria-label="Switch Camera">🔄</button>
+          <button id="closeCameraModalBtn" class="icon-btn" aria-label="Close modal">✕</button>
+        </div>
       </div>
       <div class="camera-body">
         <div class="camera-viewport-wrap">
           <video id="cameraVideo" autoplay playsinline muted></video>
           <canvas id="cameraCanvas" class="hidden"></canvas>
+          <img id="cameraSnapshotPreview" class="camera-snapshot-preview hidden" alt="Snapshot preview">
           <div id="cameraScanLine" class="camera-scan-line"></div>
+          <div id="cameraFallbackBanner" class="camera-fallback-banner hidden">
+            <span class="camera-fallback-icon">📷⚠️</span>
+            <p id="cameraFallbackText">Camera access is blocked or not supported on this browser.</p>
+            <button id="cameraUploadFallbackBtn" class="btn btn-primary btn-sm">📁 Upload Photo from Files</button>
+          </div>
         </div>
-        <div class="camera-controls">
-          <button id="captureSnapshotBtn" class="btn btn-primary btn-capture">
+
+        <!-- Live Capture Controls -->
+        <div id="cameraLiveControls" class="camera-controls">
+          <button id="captureSnapshotBtn" class="btn btn-primary btn-capture" title="Take Photo">
             <span class="btn-shutter-circle"></span>
             <span>Snap Photo</span>
           </button>
-          <button id="cancelCameraBtn" class="btn btn-secondary">Cancel</button>
+          <button id="flipCameraBtnMobile" class="btn btn-secondary btn-sm" title="Flip Camera">
+            <span>🔄 Switch</span>
+          </button>
+          <button id="cancelCameraBtn" class="btn btn-secondary btn-sm">Cancel</button>
+        </div>
+
+        <!-- Snapshot Review / Confirm Controls -->
+        <div id="cameraPreviewControls" class="camera-controls hidden">
+          <button id="confirmSnapshotBtn" class="btn btn-primary btn-sm" title="Use this photo">
+            <span>✓ Use Photo</span>
+          </button>
+          <button id="retakeSnapshotBtn" class="btn btn-secondary btn-sm" title="Retake photo">
+            <span>↺ Retake</span>
+          </button>
         </div>
       </div>
     </div>

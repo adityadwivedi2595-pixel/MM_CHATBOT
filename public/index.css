@@ -812,12 +812,12 @@ html, body {
   background: linear-gradient(135deg, rgba(99, 102, 241, 0.22) 0%, rgba(139, 92, 246, 0.25) 100%);
   border: 1px solid rgba(99, 102, 241, 0.4);
   color: var(--text-main);
-  padding: 0.85rem 1.15rem;
-  border-radius: 18px 4px 18px 18px;
-  max-width: 80%;
-  font-size: 0.94rem;
-  line-height: 1.55;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  padding: 0.5rem 0.9rem;
+  border-radius: 14px 4px 14px 14px;
+  max-width: 75%;
+  font-size: 0.91rem;
+  line-height: 1.45;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.16);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -867,6 +867,42 @@ html, body {
   border-radius: var(--radius-sm);
   font-size: 0.78rem;
   color: var(--text-main);
+}
+
+.generated-image-gallery {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+  max-width: 520px;
+}
+
+.generated-image-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+}
+
+.generated-image-preview {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  object-fit: contain;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: zoom-in;
+}
+
+.generated-image-download {
+  color: var(--accent-cyan);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.generated-image-download:hover {
+  text-decoration: underline;
 }
 
 /* Markdown Styling inside Assistant Messages */
@@ -1225,12 +1261,12 @@ html, body {
 .capabilities-bar {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.35rem;
   max-width: 860px;
   width: 100%;
-  margin-bottom: 0.55rem;
+  margin-bottom: 0.35rem;
   overflow-x: auto;
-  padding: 0.15rem 0.2rem 0.35rem;
+  padding: 0.1rem 0.2rem 0.25rem;
   scrollbar-width: none;
 }
 
@@ -1241,13 +1277,13 @@ html, body {
 .cap-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.32rem 0.7rem;
+  gap: 0.3rem;
+  padding: 0.25rem 0.58rem;
   border-radius: 9999px;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
@@ -1265,11 +1301,11 @@ html, body {
 }
 
 .cap-icon {
-  font-size: 0.88rem;
+  font-size: 0.82rem;
 }
 
 .input-section {
-  padding: 0 1.5rem 1.25rem;
+  padding: 0 1.25rem 0.65rem;
   background: transparent;
   display: flex;
   flex-direction: column;
@@ -1280,14 +1316,15 @@ html, body {
 
 .input-dock-container {
   display: flex;
-  align-items: flex-end;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.4rem;
   max-width: 860px;
   width: 100%;
+  min-height: 42px;
   background: var(--bg-card);
   border: 1.5px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  padding: 0.5rem 0.75rem;
+  border-radius: 22px;
+  padding: 0.28rem 0.55rem;
   box-shadow: var(--shadow-md);
   backdrop-filter: blur(20px);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
@@ -1302,12 +1339,12 @@ html, body {
 .input-actions-right {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.25rem;
 }
 
 .dock-btn {
-  width: 38px;
-  height: 38px;
+  width: 33px;
+  height: 33px;
   border-radius: 50%;
   background: transparent;
   border: none;
@@ -1318,6 +1355,11 @@ html, body {
   cursor: pointer;
   transition: all var(--transition-fast);
   flex-shrink: 0;
+}
+
+.dock-btn svg {
+  width: 17px;
+  height: 17px;
 }
 
 .dock-btn:hover {
@@ -1345,8 +1387,8 @@ html, body {
 .btn-send:hover {
   background: var(--gradient-brand);
   color: #ffffff;
-  transform: translateY(-1.5px);
-  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 14px rgba(99, 102, 241, 0.45);
 }
 
 /* Floating Stop Generating Control */
@@ -1442,28 +1484,31 @@ html, body {
 
 .message-textarea {
   width: 100%;
-  max-height: 180px;
+  height: 24px;
+  min-height: 24px;
+  max-height: 120px;
   background: transparent;
   border: none;
   outline: none;
   color: var(--text-main);
   font-family: var(--font-sans);
-  font-size: 0.95rem;
-  line-height: 1.5;
+  font-size: 0.91rem;
+  line-height: 1.35;
   resize: none;
-  padding: 0.45rem 0.4rem;
+  padding: 0.2rem 0.45rem;
 }
 
 .message-textarea::placeholder {
   color: var(--text-dim);
+  font-size: 0.88rem;
 }
 
 .input-hint-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 0.5rem;
-  font-size: 0.72rem;
+  margin-top: 0.25rem;
+  font-size: 0.7rem;
   color: var(--text-dim);
 }
 
@@ -1744,25 +1789,87 @@ html, body {
   font-size: 0.78rem;
 }
 
-/* Camera Modal Styles */
+/* Camera Modal Styles (Cross-Device Screen Compatible) */
 .camera-modal-container {
-  max-width: 600px;
+  max-width: min(92vw, 560px);
+  max-height: 90vh;
+  margin: auto;
+}
+
+.modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.camera-body {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  overflow: hidden;
 }
 
 .camera-viewport-wrap {
   position: relative;
   width: 100%;
   aspect-ratio: 4 / 3;
+  max-height: 52vh;
   background: #000;
   border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 600px) {
+  .camera-viewport-wrap {
+    aspect-ratio: auto;
+    height: 48vh;
+  }
 }
 
 #cameraVideo {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.camera-snapshot-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 5;
+  background: #000;
+}
+
+.camera-fallback-banner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  text-align: center;
+  background: rgba(15, 23, 42, 0.95);
+  z-index: 10;
+  gap: 0.75rem;
+}
+
+.camera-fallback-icon {
+  font-size: 2.2rem;
+}
+
+.camera-fallback-banner p {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  max-width: 320px;
 }
 
 .camera-scan-line {
@@ -1774,6 +1881,7 @@ html, body {
   background: var(--accent-cyan);
   box-shadow: 0 0 10px var(--accent-cyan);
   animation: scanEffect 2.5s infinite linear;
+  z-index: 2;
 }
 
 @keyframes scanEffect {
@@ -1787,16 +1895,18 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
-  padding: 1rem 0;
+  gap: 0.65rem;
+  width: 100%;
+  flex-wrap: wrap;
+  padding: 0.25rem 0;
 }
 
 .btn-capture {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.75rem 1.8rem;
-  font-size: 0.95rem;
+  padding: 0.65rem 1.6rem;
+  font-size: 0.92rem;
   border-radius: var(--radius-full);
 }
 
