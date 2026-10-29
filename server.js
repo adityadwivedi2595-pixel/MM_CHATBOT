@@ -81,19 +81,54 @@ app.post('/api/test-key', async (req, res) => {
   }
 });
 
+function isImageGenerationRequestText(text) {
+  if (!text || typeof text !== 'string') return false;
+  const t = text.toLowerCase().trim();
+
+  // If asking for definition or identity without photo/image keywords, skip
+  if (/^(?:who is|what is|why is|how to|where is|koun hai|kya hai|kaun hai)\b/i.test(t) && !/\b(?:photo|image|picture|pic|tasveer)\b/i.test(t)) {
+    return false;
+  }
+
+  if (/^(?:draw|paint|sketch)\s+(?:a|an|me|the)?\s+/i.test(t)) return true;
+
+  const imageNouns = '(?:image|picture|photo|photograph|illustration|artwork|wallpaper|poster|logo|thumbnail|icon|tasveer|tasvir|pic|pics|chitra|तस्वीर|तसवीर|फोटो|चित्र|छवि|इमेज)';
+  const imageVerbs = '(?:generate|create|make|draw|design|paint|illustrate|render|bana(?:o|do|na|ye|de)?|bna(?:o|do|de)?|karo|kar\\s*(?:do|de)|want|need|show(?:\\s+me)?|dikha(?:o|na|ye|do|de)?|bhej(?:o|na|do|de)?|send|give|do|de(?:\\s*(?:do|de))?|chahiye|mangta|बनाओ|बना\\s*दो|बनादो|दिखाओ|भेजो|दीजिए|चाहिए)';
+
+  if (new RegExp('^' + imageVerbs + '\\s+(?:an?\\s+)?' + imageNouns, 'i').test(t)) return true;
+  if (new RegExp(imageNouns + '\\s+' + imageVerbs, 'i').test(t)) return true;
+  if (new RegExp(imageVerbs + '.*' + imageNouns, 'i').test(t)) return true;
+  if (new RegExp(imageNouns + '.*' + imageVerbs, 'i').test(t)) return true;
+  if (new RegExp('\\bki\\s+' + imageNouns + '\\b', 'i').test(t)) return true;
+  if (new RegExp('\\bka\\s+' + imageNouns + '\\b', 'i').test(t)) return true;
+  if (new RegExp('\\b' + imageNouns + '\\s+(?:of|for|ki|ka)\\b', 'i').test(t)) return true;
+  if (new RegExp('\\b' + imageNouns + '$', 'i').test(t)) return true;
+
+  return false;
+}
+
+function cleanImagePrompt(userPrompt) {
+  let s = (userPrompt || '').trim();
+  s = s.replace(/^(?:bhai|bro|please|kripya|can you|hey|hello|assistant)\s+/i, '');
+  s = s.replace(/^(?:mujhe|humko|hame)\s+/i, '');
+  s = s.replace(/^(?:(?:that\s+(?:the|teh)\s+)?(?:chatbot\s+)?(?:gem[\W_]*nerate|gen(?:er|ar)ate|generate|create|draw|make|render|paint|sketch|show(?:\s+me)?|give(?:\s+me)?|send(?:\s+me)?)\s+(?:the\s+)?(?:an?\s+)?(?:image|imag|picture|photo|illustration|artwork|pic|pics|wallpaper)\s*(?:e?of|about|depicting|for)?\s*)/i, '');
+  s = s.replace(/^(?:an?\s+)?(?:image|photo|picture|pic|pics|wallpaper)\s+(?:of|for|about)\s+/i, '');
+  s = s.replace(/^(?:(?:ek\s+)?(?:achi\s+|achhi\s+|badhiya\s+|sundar\s+|mast\s+)?(?:si\s+)?)?(?:image|photo|picture|tasveer|pic)\s*(?:banao|dikhao|generate\s*karo|bhejo|do|de\s*do|chahiye)\s*(?:ki|ka|ke|of)?\s*/i, '');
+  s = s.replace(/\s*(?:ki|ka|ke)?\s*(?:image|photo|picture|tasveer|chitra|pic|pics|wallpaper)\s*(?:banao|generate\s*karo|dikhao|bana\s*(?:do|de|o)|bhej\s*(?:do|de|o)|bhejo|do|de\s*do|chahiye|mangta|karo)\s*$/i, '');
+  s = s.replace(/\s*(?:ki|ka|ke)\s*(?:image|photo|picture|tasveer|pic|pics)\s*$/i, '');
+  s = s.replace(/\s+(?:image|photo|picture|pic|pics)$/i, '');
+  s = s.replace(/\s+(?:ki|ka|ke)\s*$/i, '');
+  s = s.replace(/^(?:ki|ka|ke)\s+/i, '');
+  s = s.replace(/^(?:draw|paint|sketch)\s+(?:a|an|me|the)?\s+/i, '');
+  s = s.replace(/^(?:(?:ek\s+)?(?:achi\s+|achhi\s+|badhiya\s+|sundar\s+|mast\s+)?(?:si\s+)?)/i, '');
+  s = s.replace(/^[\s:;,.-]+|[\s:;,.-]+$/g, '').trim();
+  return s || 'beautiful vibrant artwork';
+}
+
 // Robust Multi-Provider Image Generation Engine
 async function generateHighQualityImage(userPrompt, apiKey, attachments = []) {
-  // 1. Clean and normalize prompt (English & Hindi/Hinglish command removal)
-  let cleanPrompt = (userPrompt || '').trim();
-  cleanPrompt = cleanPrompt.replace(/^(?:(?:that\s+(?:the|teh)\s+)?(?:chatbot\s+)?(?:please\s+)?(?:can\s+you\s+)?(?:gem[\W_]*nerate|gen(?:er|ar)ate|generate|create|draw|make|render|paint|show(?:\s+me)?)\s+(?:the\s+)?(?:an?\s+)?(?:image|imag|picture|photo|illustration|artwork)\s*(?:e?of|about|depicting|for)?\s*)/i, '');
-  cleanPrompt = cleanPrompt.replace(/^(?:(?:ek|kripya)\s+)?(?:image|photo|picture|tasveer)\s+(?:banao|dikhao|generate\s+karo)\s*(?:ki|ka|ke)?\s*/i, '');
-  cleanPrompt = cleanPrompt.replace(/\s*(?:ki|ka|ke)?\s*(?:image|photo|picture|tasveer|chitra)\s*(?:banao|generate\s+karo|dikhao|bana\s+do|chahiye|karo)\s*$/i, '');
-  cleanPrompt = cleanPrompt.replace(/\s+(?:ki|ka|ke)\s*$/i, '');
-  cleanPrompt = cleanPrompt.replace(/^[\s:;,.-]+|[\s:;,.-]+$/g, '').trim();
-
-  if (!cleanPrompt || cleanPrompt.length < 2 || /^(image|picture|photo|pic)$/i.test(cleanPrompt)) {
-    throw new Error('Please describe what you want in the image (e.g. "a majestic white tiger in snow" or "shinchan").');
-  }
+  // 1. Clean and normalize prompt
+  const cleanPrompt = cleanImagePrompt(userPrompt);
 
   // 2. Prompt Enrichment for studio quality
   const lower = cleanPrompt.toLowerCase();
@@ -180,8 +215,27 @@ async function generateHighQualityImage(userPrompt, apiKey, attachments = []) {
       };
     }
   } catch (err) {
-    console.warn('[IMAGE] Pollinations FLUX failed, cascading to fallback engine:', err.message);
+    console.warn('[IMAGE] Pollinations FLUX failed, cascading:', err.message);
   }
+
+  // Tier 2.5: Pollinations Turbo Engine (Fast fallback diffusion)
+  try {
+    const seed = Math.floor(Math.random() * 2147483640);
+    const enc = encodeURIComponent(enrichedPrompt);
+    const url = `https://image.pollinations.ai/prompt/${enc}?width=768&height=768&seed=${seed}&nologo=true&model=turbo`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+      signal: AbortSignal.timeout(12000)
+    });
+    if (res.ok) {
+      const mime = res.headers.get('content-type') || 'image/jpeg';
+      const buf = Buffer.from(await res.arrayBuffer());
+      return {
+        images: [{ mimeType: mime.split(';')[0].trim(), data: buf.toString('base64') }],
+        text: `Generated image for: **"${cleanPrompt}"**`
+      };
+    }
+  } catch (_) {}
 
   // Tier 3: Authentic Media Archive (for known characters, anime, and iconic subjects)
   if (isCharacter || cleanPrompt.split(/\s+/).length <= 4) {
@@ -193,11 +247,11 @@ async function generateHighQualityImage(userPrompt, apiKey, attachments = []) {
       for (const v of variations) {
         const res = await fetch('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(v), {
           headers: { 'User-Agent': 'MM-Chatbot/1.0 (info@example.com)' },
-          signal: AbortSignal.timeout(6000)
+          signal: AbortSignal.timeout(5000)
         });
         if (res.ok) {
           const data = await res.json();
-          const imgUrl = data.originalimage?.source || data.thumbnail?.source;
+          const imgUrl = (data.thumbnail && data.thumbnail.source) || (data.originalimage && data.originalimage.source);
           if (imgUrl && !imgUrl.endsWith('.svg')) {
             const imgRes = await fetch(imgUrl, {
               headers: { 'User-Agent': 'Mozilla/5.0' },
@@ -210,6 +264,32 @@ async function generateHighQualityImage(userPrompt, apiKey, attachments = []) {
                 images: [{ mimeType: mime.split(';')[0].trim(), data: buf.toString('base64') }],
                 text: `Generated visual for: **"${cleanPrompt}"**`
               };
+            }
+          }
+        }
+      }
+
+      // Title thumbnail lookup for general entities (Tiger, Lion, Taj Mahal, etc.)
+      const titlesUrl = 'https://en.wikipedia.org/w/api.php?action=query&titles=' + encodeURIComponent(cleanPrompt) + '&prop=pageimages&format=json&pithumbsize=1024';
+      const titlesRes = await fetch(titlesUrl, {
+        headers: { 'User-Agent': 'MM-Chatbot/1.0' },
+        signal: AbortSignal.timeout(5000)
+      });
+      if (titlesRes.ok) {
+        const titlesData = await titlesRes.json();
+        if (titlesData.query && titlesData.query.pages) {
+          for (const page of Object.values(titlesData.query.pages)) {
+            const imgUrl = page.thumbnail && page.thumbnail.source;
+            if (imgUrl && !imgUrl.endsWith('.svg')) {
+              const imgRes = await fetch(imgUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(10000) });
+              if (imgRes.ok) {
+                const mime = imgRes.headers.get('content-type') || 'image/jpeg';
+                const buf = Buffer.from(await imgRes.arrayBuffer());
+                return {
+                  images: [{ mimeType: mime.split(';')[0].trim(), data: buf.toString('base64') }],
+                  text: `Generated visual for: **"${cleanPrompt}"**`
+                };
+              }
             }
           }
         }
@@ -302,7 +382,7 @@ function normalizeGeminiInteractionInput(messages = [], attachments = [], system
     if (text) transcript.push(role + ': ' + text);
   }
   const input = [];
-  const baseInstruction = 'You are Zenith Assistant, an intelligent, articulate, helpful, and friendly multimodal AI assistant. Provide thoughtful, well-structured, accurate, and comprehensive responses. If the user writes or speaks in Hindi or Hinglish, reply naturally and accurately in Hindi/Hinglish. Use clear markdown formatting with bold headings, bullet points, and code blocks where helpful.';
+  const baseInstruction = 'You are Zenith Assistant, an intelligent, articulate, helpful, and friendly multimodal AI assistant. Provide thoughtful, well-structured, accurate, and comprehensive responses. If the user writes or speaks in Hindi or Hinglish, reply naturally and accurately in Hindi/Hinglish. Use clear markdown formatting with bold headings, bullet points, and code blocks where helpful. Never tell the user to go to Google Images, Pinterest, or external search engines to find photos. You are a multimodal assistant that can generate and perceive visuals directly.';
   const effectiveInstruction = (systemInstruction && systemInstruction.trim())
     ? `${baseInstruction}\n\nAdditional user guidelines: ${systemInstruction.trim()}`
     : baseInstruction;
@@ -340,6 +420,27 @@ app.post('/api/chat', async (req, res) => {
   res.flushHeaders();
   res.write('data: ' + JSON.stringify({ type: 'start', model: selectedModel }) + '\n\n');
   if (!apiKey) return streamSmartCognitiveResponse(res, '', [], selectedModel, 'Add your Gemini API key in Settings or configure GEMINI_API_KEY on the server.');
+
+  // If user is directly requesting a photo/image inside chat, generate and stream it directly
+  const latestUser = (messages || []).slice().reverse().find(m => m && m.role === 'user');
+  const userText = latestUser ? String(latestUser.content || '') : '';
+  if (isImageGenerationRequestText(userText)) {
+    try {
+      const imgResult = await generateHighQualityImage(userText, apiKey, attachments);
+      const firstImg = imgResult.images && imgResult.images[0];
+      if (firstImg && firstImg.data) {
+        const cleanPrompt = cleanImagePrompt(userText);
+        const dataUri = `data:${firstImg.mimeType};base64,${firstImg.data}`;
+        const markdown = `Yeh lijiye aapki image for **"${cleanPrompt}"**:\n\n![${cleanPrompt}](${dataUri})\n\n[📥 Download Image](${dataUri})\n\n`;
+        res.write('data: ' + JSON.stringify({ type: 'chunk', text: markdown }) + '\n\n');
+        res.write('data: ' + JSON.stringify({ type: 'done', stats: { live: true, model: 'image-engine' } }) + '\n\n');
+        res.end();
+        return;
+      }
+    } catch (imgErr) {
+      console.warn('[CHAT] Auto image generation error, falling through to model:', imgErr.message);
+    }
+  }
 
   try {
     const input = normalizeGeminiInteractionInput(messages, attachments, systemInstruction);

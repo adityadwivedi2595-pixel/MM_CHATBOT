@@ -902,24 +902,26 @@
     if (!text || typeof text !== 'string') return false;
     const t = text.toLowerCase().trim();
 
-    // Direct command prefixes
-    if (/^(generate|create|make|draw|paint|render|design)\s+(an?\s+)?(image|picture|photo|illustration|art|artwork|wallpaper|logo|drawing)/i.test(t)) return true;
-    if (/^(draw|paint)\s+(a|an|me|the)?\s+/i.test(t)) return true;
-    if (/\b(image\s*generation|generate\s*image|photo\s*generate|draw\s*image|picture\s*generate|make\s*image)\b/i.test(t)) return true;
-    if (/\b(generate|create|make|draw|design|paint)\b.*\b(image|picture|photo|illustration|artwork|wallpaper|drawing)\b/i.test(t)) return true;
+    // If asking for definition or identity without photo/image keywords, skip
+    if (/^(?:who is|what is|why is|how to|where is|koun hai|kya hai|kaun hai)\b/i.test(t) && !/\b(?:photo|image|picture|pic|tasveer)\b/i.test(t)) {
+      return false;
+    }
 
-    // Multilingual & Roman Hindi support
-    const imageWords = /\b(?:image|picture|photo|photograph|illustration|artwork|wallpaper|poster|logo|thumbnail|icon|tasveer|tasvir|pic)\b|तस्वीर|तसवीर|फोटो|चित्र|छवि|इमेज/i;
-    const generationWords = /\b(?:generate|create|make|draw|design|paint|illustrate|render|bana(?:o|do)?|bna(?:o|do)?|karo|kar\s+do|want|need|show\s+me|dikhao)\b|बनाओ|बना\s*दो|बनादो|तैयार\s*करो/i;
-    if (imageWords.test(t) && generationWords.test(t)) return true;
+    if (/^(?:draw|paint|sketch)\s+(?:a|an|me|the)?\s+/i.test(t)) return true;
 
-    // Common query patterns like 'shinchan image' or 'photo of doraemon' or 'shinchan ki photo'
-    if (/^(?:image|photo|picture|pic)\s+(?:of|for)\s+/i.test(t)) return true;
-    if (/^.+\s+(?:image|photo|picture|pic)$/i.test(t) && !/^(?:what|how|who|why|where|can|is|are)\b/i.test(t)) return true;
-    if (/^.+\s+ki\s+(?:photo|image|picture|pic|tasveer)$/i.test(t)) return true;
+    const imageNouns = '(?:image|picture|photo|photograph|illustration|artwork|wallpaper|poster|logo|thumbnail|icon|tasveer|tasvir|pic|pics|chitra|तस्वीर|तसवीर|फोटो|चित्र|छवि|इमेज)';
+    const imageVerbs = '(?:generate|create|make|draw|design|paint|illustrate|render|bana(?:o|do|na|ye|de)?|bna(?:o|do|de)?|karo|kar\\s*(?:do|de)|want|need|show(?:\\s+me)?|dikha(?:o|na|ye|do|de)?|bhej(?:o|na|do|de)?|send|give|do|de(?:\\s*(?:do|de))?|chahiye|mangta|बनाओ|बना\\s*दो|बनादो|दिखाओ|भेजो|दीजिए|चाहिए)';
 
-    // Catch common typing errors such as "gemnerate the imag of ..." without
-    // mistaking ordinary questions for image requests.
+    if (new RegExp('^' + imageVerbs + '\\s+(?:an?\\s+)?' + imageNouns, 'i').test(t)) return true;
+    if (new RegExp(imageNouns + '\\s+' + imageVerbs, 'i').test(t)) return true;
+    if (new RegExp(imageVerbs + '.*' + imageNouns, 'i').test(t)) return true;
+    if (new RegExp(imageNouns + '.*' + imageVerbs, 'i').test(t)) return true;
+    if (new RegExp('\\bki\\s+' + imageNouns + '\\b', 'i').test(t)) return true;
+    if (new RegExp('\\bka\\s+' + imageNouns + '\\b', 'i').test(t)) return true;
+    if (new RegExp('\\b' + imageNouns + '\\s+(?:of|for|ki|ka)\\b', 'i').test(t)) return true;
+    if (new RegExp('\\b' + imageNouns + '$', 'i').test(t)) return true;
+
+    // Catch common typing errors such as "gemnerate the imag of ..."
     const words = t.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
     const fuzzyCandidates = [...words];
     for (let i = 0; i < words.length - 1; i++) fuzzyCandidates.push(words[i] + words[i + 1]);

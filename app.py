@@ -105,20 +105,57 @@ async def test_key(req: KeyTestRequest):
         return JSONResponse(status_code=502, content={"valid": False, "error": str(exc)})
 
 
+def is_image_generation_request_text(text: str) -> bool:
+    if not text or not isinstance(text, str):
+        return False
+    t = text.lower().strip()
+    if re.search(r"^(?:who is|what is|why is|how to|where is|koun hai|kya hai|kaun hai)\b", t, re.I) and not re.search(r"\b(?:photo|image|picture|pic|tasveer)\b", t, re.I):
+        return False
+    if re.search(r"^(?:draw|paint|sketch)\s+(?:a|an|me|the)?\s+", t, re.I):
+        return True
+    nouns = r"(?:image|picture|photo|photograph|illustration|artwork|wallpaper|poster|logo|thumbnail|icon|tasveer|tasvir|pic|pics|chitra|तस्वीर|तसवीर|फोटो|चित्र|छवि|इमेज)"
+    verbs = r"(?:generate|create|make|draw|design|paint|illustrate|render|bana(?:o|do|na|ye|de)?|bna(?:o|do|de)?|karo|kar\s*(?:do|de)|want|need|show(?:\s+me)?|dikha(?:o|na|ye|do|de)?|bhej(?:o|na|do|de)?|send|give|do|de(?:\s*(?:do|de))?|chahiye|mangta|बनाओ|बना\s*दो|बनादो|दिखाओ|भेजो|दीजिए|चाहिए)"
+    if re.search(rf"^{verbs}\s+(?:an?\s+)?{nouns}", t, re.I):
+        return True
+    if re.search(rf"{nouns}\s+{verbs}", t, re.I):
+        return True
+    if re.search(rf"{verbs}.*{nouns}", t, re.I):
+        return True
+    if re.search(rf"{nouns}.*{verbs}", t, re.I):
+        return True
+    if re.search(rf"\bki\s+{nouns}\b", t, re.I) or re.search(rf"\bka\s+{nouns}\b", t, re.I):
+        return True
+    if re.search(rf"\b{nouns}\s+(?:of|for|ki|ka)\b", t, re.I):
+        return True
+    if re.search(rf"\b{nouns}$", t, re.I):
+        return True
+    return False
+
+
+def clean_image_prompt(p: str) -> str:
+    s = (p or "").strip()
+    s = re.sub(r"^(?:bhai|bro|please|kripya|can you|hey|hello|assistant)\s+", "", s, flags=re.I)
+    s = re.sub(r"^(?:mujhe|humko|hame)\s+", "", s, flags=re.I)
+    s = re.sub(r"^(?:(?:that\s+(?:the|teh)\s+)?(?:chatbot\s+)?(?:gem[\W_]*nerate|gen(?:er|ar)ate|generate|create|draw|make|render|paint|sketch|show(?:\s+me)?|give(?:\s+me)?|send(?:\s+me)?)\s+(?:the\s+)?(?:an?\s+)?(?:image|imag|picture|photo|illustration|artwork|pic|pics|wallpaper)\s*(?:e?of|about|depicting|for)?\s*)", "", s, flags=re.I)
+    s = re.sub(r"^(?:an?\s+)?(?:image|photo|picture|pic|pics|wallpaper)\s+(?:of|for|about)\s+", "", s, flags=re.I)
+    s = re.sub(r"^(?:(?:ek\s+)?(?:achi\s+|achhi\s+|badhiya\s+|sundar\s+|mast\s+)?(?:si\s+)?)?(?:image|photo|picture|tasveer|pic)\s*(?:banao|dikhao|generate\s*karo|bhejo|do|de\s*do|chahiye)\s*(?:ki|ka|ke|of)?\s*", "", s, flags=re.I)
+    s = re.sub(r"\s*(?:ki|ka|ke)?\s*(?:image|photo|picture|tasveer|chitra|pic|pics|wallpaper)\s*(?:banao|generate\s*karo|dikhao|bana\s*(?:do|de|o)|bhej\s*(?:do|de|o)|bhejo|do|de\s*do|chahiye|mangta|karo)\s*$", "", s, flags=re.I)
+    s = re.sub(r"\s*(?:ki|ka|ke)\s*(?:image|photo|picture|tasveer|pic|pics)\s*$", "", s, flags=re.I)
+    s = re.sub(r"\s+(?:image|photo|picture|pic|pics)$", "", s, flags=re.I)
+    s = re.sub(r"\s+(?:ki|ka|ke)\s*$", "", s, flags=re.I)
+    s = re.sub(r"^(?:ki|ka|ke)\s+", "", s, flags=re.I)
+    s = re.sub(r"^(?:draw|paint|sketch)\s+(?:a|an|me|the)?\s+", "", s, flags=re.I)
+    s = re.sub(r"^(?:(?:ek\s+)?(?:achi\s+|achhi\s+|badhiya\s+|sundar\s+|mast\s+)?(?:si\s+)?)", "", s, flags=re.I)
+    s = re.sub(r"^[\s:;,.-]+|[\s:;,.-]+$", "", s).strip()
+    return s or "beautiful vibrant artwork"
+
+
 async def generate_high_quality_image(prompt: str, api_key: Optional[str] = None, attachments: Optional[List[Attachment]] = None) -> dict:
     import random
     import base64
     import asyncio
 
-    clean_prompt = prompt.strip()
-    clean_prompt = re.sub(r"^(?:(?:that\s+(?:the|teh)\s+)?(?:chatbot\s+)?(?:please\s+)?(?:can\s+you\s+)?(?:gem[\W_]*nerate|gen(?:er|ar)ate|generate|create|draw|make|render|paint|show(?:\s+me)?)\s+(?:the\s+)?(?:an?\s+)?(?:image|imag|picture|photo|illustration|artwork)\s*(?:e?of|about|depicting|for)?\s*)", "", clean_prompt, flags=re.I)
-    clean_prompt = re.sub(r"^(?:(?:ek|kripya)\s+)?(?:image|photo|picture|tasveer)\s+(?:banao|dikhao|generate\s+karo)\s*(?:ki|ka|ke)?\s*", "", clean_prompt, flags=re.I)
-    clean_prompt = re.sub(r"\s*(?:ki|ka|ke)?\s*(?:image|photo|picture|tasveer|chitra)\s*(?:banao|generate\s+karo|dikhao|bana\s+do|chahiye|karo)\s*$", "", clean_prompt, flags=re.I)
-    clean_prompt = re.sub(r"\s+(?:ki|ka|ke)\s*$", "", clean_prompt, flags=re.I)
-    clean_prompt = re.sub(r"^[\s:;,.-]+|[\s:;,.-]+$", "", clean_prompt).strip()
-
-    if len(clean_prompt) < 2 or re.fullmatch(r"(image|picture|photo|pic)", clean_prompt, flags=re.I):
-        raise HTTPException(status_code=400, detail="Please describe what you want in the image (e.g. 'a majestic white tiger in snow' or 'shinchan').")
+    clean_prompt = clean_image_prompt(prompt)
 
     lower = clean_prompt.lower()
     is_character = False
@@ -285,8 +322,25 @@ async def chat_endpoint(req: ChatRequest):
         if not api_key:
             yield sse({"type": "error", "error": "Add your Gemini API key in Settings or set GEMINI_API_KEY on the server."})
             return
+
+        latest_user = next((m for m in reversed(req.messages or []) if m.role == "user"), None)
+        latest_text = latest_user.content if latest_user and latest_user.content else ""
+        if is_image_generation_request_text(latest_text):
+            try:
+                img_res = await generate_high_quality_image(latest_text, api_key, req.attachments)
+                first_img = img_res.get("images", [{}])[0]
+                if first_img and first_img.get("data"):
+                    clean_p = clean_image_prompt(latest_text)
+                    data_uri = f"data:{first_img.get('mimeType', 'image/jpeg')};base64,{first_img['data']}"
+                    md = f"Yeh lijiye aapki image for **\"{clean_p}\"**:\n\n![{clean_p}]({data_uri})\n\n[📥 Download Image]({data_uri})\n\n"
+                    yield sse({"type": "chunk", "text": md})
+                    yield sse({"type": "done", "stats": {"live": True, "model": "image-engine"}})
+                    return
+            except Exception as e:
+                pass
+
         payload = {"model": selected_model, "input": build_gemini_contents(req.messages, req.attachments), "stream": True}
-        base_instruction = "You are Zenith Assistant, an intelligent, articulate, helpful, and friendly multimodal AI assistant. Provide thoughtful, well-structured, accurate, and comprehensive responses. If the user writes or speaks in Hindi or Hinglish, reply naturally and accurately in Hindi/Hinglish. Use clear markdown formatting with bold headings, bullet points, and code blocks where helpful."
+        base_instruction = "You are Zenith Assistant, an intelligent, articulate, helpful, and friendly multimodal AI assistant. Provide thoughtful, well-structured, accurate, and comprehensive responses. If the user writes or speaks in Hindi or Hinglish, reply naturally and accurately in Hindi/Hinglish. Use clear markdown formatting with bold headings, bullet points, and code blocks where helpful. Never tell the user to go to Google Images, Pinterest, or external search engines to find photos. You are a multimodal assistant that can generate and perceive visuals directly."
         effective_instruction = f"{base_instruction}\n\nAdditional user guidelines: {req.systemInstruction.strip()}" if (req.systemInstruction and req.systemInstruction.strip()) else base_instruction
         payload["input"].insert(0, {"type": "text", "text": "System instruction: " + effective_instruction})
         try:
