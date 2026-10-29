@@ -920,6 +920,7 @@
     if (new RegExp('\\bka\\s+' + imageNouns + '\\b', 'i').test(t)) return true;
     if (new RegExp('\\b' + imageNouns + '\\s+(?:of|for|ki|ka)\\b', 'i').test(t)) return true;
     if (new RegExp('\\b' + imageNouns + '$', 'i').test(t)) return true;
+    if (/\b(?:asli\s*(?:log(?:o|on)?|aadmi|insaan|aurat|ladki|ladka)|real\s*(?:people|person|human))\b/i.test(t)) return true;
 
     // Catch common typing errors such as "gemnerate the imag of ..."
     const words = t.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
