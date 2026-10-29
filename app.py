@@ -197,6 +197,49 @@ AUTHENTIC_ENTITIES = [
 ]
 
 
+async def fetch_real_web_photo(query: str, client: httpx.AsyncClient) -> Optional[dict]:
+    import base64
+    try:
+        token_res = await client.get(f"https://duckduckgo.com/?q={httpx.URL('', params={'q': query}).params['q']}", timeout=4.0)
+        if not token_res.is_success:
+            return None
+        m = re.search(r"vqd=[\"']?([^\"'&]+)[\"']?", token_res.text)
+        if not m:
+            return None
+        vqd = m.group(1)
+
+        is_logo = bool(re.search(r"\b(?:logo|emblem|icon|symbol)\b", query, re.I))
+        flt = "&f=,,,type:transparent," if is_logo else "&f=,,,type:photo,"
+        enc_q = httpx.URL("", params={"q": query}).params["q"]
+        api_url = f"https://duckduckgo.com/i.js?l=us-en&o=json&q={enc_q}&vqd={vqd}{flt}&p=1"
+        res = await client.get(api_url, headers={"Referer": "https://duckduckgo.com/"}, timeout=5.0)
+        if not res.is_success:
+            return None
+        data = res.json()
+        candidates = (data.get("results") or [])[:8]
+        for item in candidates:
+            img_url = item.get("image") or ""
+            if not img_url.startswith("http://") and not img_url.startswith("https://"):
+                continue
+            try:
+                img_fetch = await client.get(img_url, timeout=6.0)
+                if img_fetch.is_success:
+                    mime = img_fetch.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+                    if mime.startswith("image/"):
+                        content = img_fetch.content
+                        if len(content) > 5000:
+                            b64 = base64.b64encode(content).decode("ascii")
+                            return {
+                                "images": [{"mimeType": mime, "data": b64}],
+                                "text": f'Real photo for: **"{query}"**'
+                            }
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return None
+
+
 async def fetch_authentic_visual(prompt: str, client: httpx.AsyncClient) -> Optional[dict]:
     import base64
     for item in AUTHENTIC_ENTITIES:
@@ -219,6 +262,38 @@ async def fetch_authentic_visual(prompt: str, client: httpx.AsyncClient) -> Opti
             except Exception:
                 pass
     return None
+
+
+def translate_hindi_to_english(text: str) -> str:
+    eng = (text or "").strip()
+    translations = [
+        (r"\b(?:asli\s*(?:log(?:o|on)?|aadmi|insaan|manav|janta|vyakti)|real\s*(?:people|person|human(?:s)?))\b", "real Indian people smiling portrait"),
+        (r"\b(?:sundar|khubsurat)\s+(?:ladki|kanya|mahila|aurat)\b", "beautiful Indian woman portrait"),
+        (r"\b(?:ladki|kanya)\b", "beautiful Indian girl portrait"),
+        (r"\b(?:aurat|mahila)\b", "Indian woman portrait"),
+        (r"\b(?:ladka)\b", "handsome Indian boy portrait"),
+        (r"\b(?:aadmi|purush)\b", "handsome Indian man portrait"),
+        (r"\b(?:billi)\b", "cute domestic cat"),
+        (r"\b(?:kutta|kutte)\b", "friendly dog puppy"),
+        (r"\b(?:sher)\b", "royal bengal tiger"),
+        (r"\b(?:hathi)\b", "majestic elephant"),
+        (r"\b(?:ghoda)\b", "majestic galloping horse"),
+        (r"\b(?:gadi|gaadi|car)\b", "luxury modern sports car"),
+        (r"\b(?:pahad|parvat)\b", "majestic snow mountain landscape"),
+        (r"\b(?:nadi)\b", "scenic river landscape"),
+        (r"\b(?:samundar|samudra)\b", "beautiful ocean beach sunset"),
+        (r"\b(?:suraj)\b", "golden glowing sun"),
+        (r"\b(?:chand|chanda)\b", "radiant moon in starry night sky"),
+        (r"\b(?:ped|paudhe)\b", "lush green tree landscape"),
+        (r"\b(?:phool|gulab)\b", "vibrant blossoming flowers"),
+        (r"\b(?:barish)\b", "dramatic rain aesthetic"),
+        (r"\b(?:asli)\b", "real authentic"),
+        (r"\b(?:sundar|khubsurat)\b", "beautiful stunning"),
+        (r"\b(?:achhi|achi|badhiya|mast)\b", "stunning high quality")
+    ]
+    for pat, rep in translations:
+        eng = re.sub(pat, rep, eng, flags=re.I)
+    return re.sub(r"\s+", " ", eng).strip()
 
 
 def clean_image_prompt(p: str) -> str:
@@ -305,6 +380,16 @@ async def generate_high_quality_image(prompt: str, api_key: Optional[str] = None
                 enriched_prompt = f"{eng}, masterpiece, sharp focus, 8k resolution, highly detailed"
             else:
                 enriched_prompt = f"{eng}, photorealistic, cinematic lighting, lifelike details, vibrant colors, sharp focus, high resolution 8k"
+
+        # Real High-Definition Web Photo Engine
+        search_query = (
+            ("beautiful Indian woman smiling portrait" if re.search(r"ladki|woman|girl", clean_prompt, re.I) else ("Indian handsome man portrait" if re.search(r"aadmi|man|boy", clean_prompt, re.I) else "real Indian people smiling"))
+            if is_real_people_query
+            else (clean_prompt if is_logo else translate_hindi_to_english(clean_prompt))
+        )
+        real_photo = await fetch_real_web_photo(search_query, client)
+        if real_photo:
+            return real_photo
 
         # Tier 1: Gemini Image API
         if api_key:

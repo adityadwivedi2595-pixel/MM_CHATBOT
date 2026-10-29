@@ -221,6 +221,94 @@ async function fetchAuthenticVisual(prompt) {
   return null;
 }
 
+async function fetchRealWebPhoto(query) {
+  try {
+    const tokenRes = await fetch('https://duckduckgo.com/?q=' + encodeURIComponent(query), {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      signal: AbortSignal.timeout(4000)
+    });
+    if (!tokenRes.ok) return null;
+    const html = await tokenRes.text();
+    const m = html.match(/vqd=["']?([^"'&]+)["']?/);
+    if (!m) return null;
+    const vqd = m[1];
+
+    const isLogo = /\b(?:logo|emblem|icon|symbol)\b/i.test(query);
+    const filter = isLogo ? '&f=,,,type:transparent,' : '&f=,,,type:photo,';
+    const apiUrl = 'https://duckduckgo.com/i.js?l=us-en&o=json&q=' + encodeURIComponent(query) + '&vqd=' + vqd + filter + '&p=1';
+    const res = await fetch(apiUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://duckduckgo.com/'
+      },
+      signal: AbortSignal.timeout(5000)
+    });
+    if (!res.ok) return null;
+    const d = await res.json();
+    const candidates = (d.results || []).slice(0, 8);
+    for (const item of candidates) {
+      if (!item.image || (!item.image.startsWith('http://') && !item.image.startsWith('https://'))) continue;
+      try {
+        const imgFetch = await fetch(item.image, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+          },
+          signal: AbortSignal.timeout(6000)
+        });
+        if (imgFetch.ok) {
+          const mime = (imgFetch.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
+          if (mime.startsWith('image/')) {
+            const buf = Buffer.from(await imgFetch.arrayBuffer());
+            if (buf.length > 5000) {
+              return {
+                images: [{ mimeType: mime, data: buf.toString('base64') }],
+                text: `Real photo for: **"${query}"**`
+              };
+            }
+          }
+        }
+      } catch (_) {}
+    }
+  } catch (err) {
+    console.warn('[REAL PHOTO] Error:', err.message);
+  }
+  return null;
+}
+
+function translateHindiToEnglish(text) {
+  let eng = (text || '').trim();
+  const translations = [
+    [/\b(?:asli\s*(?:log(?:o|on)?|aadmi|insaan|manav|janta|vyakti)|real\s*(?:people|person|human(?:s)?))\b/gi, 'real Indian people smiling portrait'],
+    [/\b(?:sundar|khubsurat)\s+(?:ladki|kanya|mahila|aurat)\b/gi, 'beautiful Indian woman portrait'],
+    [/\b(?:ladki|kanya)\b/gi, 'beautiful Indian girl portrait'],
+    [/\b(?:aurat|mahila)\b/gi, 'Indian woman portrait'],
+    [/\b(?:ladka)\b/gi, 'handsome Indian boy portrait'],
+    [/\b(?:aadmi|purush)\b/gi, 'handsome Indian man portrait'],
+    [/\b(?:billi)\b/gi, 'cute domestic cat'],
+    [/\b(?:kutta|kutte)\b/gi, 'friendly dog puppy'],
+    [/\b(?:sher)\b/gi, 'royal bengal tiger'],
+    [/\b(?:hathi)\b/gi, 'majestic elephant'],
+    [/\b(?:ghoda)\b/gi, 'majestic galloping horse'],
+    [/\b(?:gadi|gaadi|car)\b/gi, 'luxury modern sports car'],
+    [/\b(?:pahad|parvat)\b/gi, 'majestic snow mountain landscape'],
+    [/\b(?:nadi)\b/gi, 'scenic river landscape'],
+    [/\b(?:samundar|samudra)\b/gi, 'beautiful ocean beach sunset'],
+    [/\b(?:suraj)\b/gi, 'golden glowing sun'],
+    [/\b(?:chand|chanda)\b/gi, 'radiant moon in starry night sky'],
+    [/\b(?:ped|paudhe)\b/gi, 'lush green tree landscape'],
+    [/\b(?:phool|gulab)\b/gi, 'vibrant blossoming flowers'],
+    [/\b(?:barish)\b/gi, 'dramatic rain aesthetic'],
+    [/\b(?:asli)\b/gi, 'real authentic'],
+    [/\b(?:sundar|khubsurat)\b/gi, 'beautiful stunning'],
+    [/\b(?:achhi|achi|badhiya|mast)\b/gi, 'stunning high quality']
+  ];
+  for (const [pattern, replacement] of translations) {
+    eng = eng.replace(pattern, replacement);
+  }
+  return eng.replace(/\s+/g, ' ').trim();
+}
+
 function cleanImagePrompt(userPrompt) {
   let s = (userPrompt || '').trim();
   s = s.replace(/^(?:bhai|bro|please|kripya|can you|hey|hello|assistant|are|yaar|sun|suno)\s+/i, '');
@@ -308,6 +396,16 @@ async function generateHighQualityImage(userPrompt, apiKey, attachments = []) {
     } else {
       enrichedPrompt = `${eng}, photorealistic, cinematic lighting, lifelike details, vibrant colors, sharp focus, high resolution 8k`;
     }
+  }
+
+  // 3. Real High-Definition Web Photo Engine (Delivers genuine real photographs)
+  const searchQuery = isRealPeopleQuery
+    ? (/ladki|woman|girl/i.test(cleanPrompt) ? 'beautiful Indian woman smiling portrait' : (/aadmi|man|boy/i.test(cleanPrompt) ? 'Indian handsome man portrait' : 'real Indian people smiling'))
+    : (isLogo ? cleanPrompt : translateHindiToEnglish(cleanPrompt));
+
+  const realPhoto = await fetchRealWebPhoto(searchQuery);
+  if (realPhoto) {
+    return realPhoto;
   }
 
   // Tier 1: Gemini Image API (if configured and quota available)
