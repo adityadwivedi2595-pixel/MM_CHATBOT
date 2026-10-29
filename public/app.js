@@ -1,5 +1,5 @@
 /**
- * MM CHATBOT — Client-Side Application Logic
+ * ZENITH ASSISTANT — Client-Side Application Logic
  * Full Multimodal AI Interface (Text, Vision, Voice, Documents)
  */
 
@@ -25,6 +25,7 @@
   let pendingAttachments = []; // Array of { name, mimeType, size, data (base64) }
   let isGenerating = false;
   let imageGenerationMode = false;
+  let serverHasApiKey = null;
   let abortController = null;
   let activeAudioUtterance = null;
   let availableVoices = [];
@@ -48,7 +49,7 @@
   // Default Settings
   const defaultSettings = {
     apiKey: '',
-    model: 'gemini-3.5-flash-lite',
+    model: 'gemini-3.6-flash',
     systemPromptPreset: 'general',
     customSystemPrompt: '',
     temperature: 0.7,
@@ -62,7 +63,7 @@
 
   // System Persona Prompts
   const SYSTEM_PERSONAS = {
-    general: 'You are MM Chatbot, a world-class multimodal AI assistant. You perceive images, understand documents, listen to spoken queries, and write pristine code. Be articulate, helpful, and concise.',
+    general: 'You are Zenith Assistant, a world-class multimodal AI assistant. You perceive images, understand documents, listen to spoken queries, and write pristine code. Be articulate, helpful, and concise.',
     coder: 'You are an elite Senior Staff Software Engineer and Full-Stack Architect. Analyze code snippets, UI screenshots, and diagrams with strict technical rigor. Provide clear explanations and clean, modular code.',
     analyst: 'You are a Senior Multimodal Data & Research Analyst. When examining documents or visuals, extract key figures, format them into neat markdown tables, and highlight actionable insights.',
     creative: 'You are an imaginative Creative Director and Visual Storyteller. Provide rich, vibrant descriptions of images, concepts, and ideas with poetic yet sharp narrative craft.',
@@ -223,17 +224,22 @@
       settings = { ...defaultSettings };
     }
 
-    // Auto-migrate legacy/deprecated models
-    const legacyModels = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-pro', 'gemini-2.5-pro'];
-    if (legacyModels.includes(settings.model)) {
-      settings.model = 'gemini-3.5-flash';
-      try {
-        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-      } catch (e) {}
+    // Restore Gemini model choices after the temporary OpenAI provider change.
+    let migratedSettings = false;
+    if (!['gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-pro-preview'].includes(settings.model)) {
+      settings.model = 'gemini-3.6-flash';
+      migratedSettings = true;
+    }
+    if (/^sk-/i.test(settings.apiKey || '')) {
+      settings.apiKey = '';
+      migratedSettings = true;
+    }
+    if (migratedSettings) {
+      try { localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings)); } catch (e) {}
     }
 
     // Apply to UI controls
-    elements.modelSelect.value = settings.model || 'gemini-3.5-flash';
+    elements.modelSelect.value = settings.model || 'gemini-3.6-flash';
     elements.activeModelBadge.textContent = elements.modelSelect.options[elements.modelSelect.selectedIndex]?.text || settings.model;
     elements.apiKeyInput.value = settings.apiKey || '';
     elements.systemPromptSelect.value = settings.systemPromptPreset || 'general';
@@ -285,6 +291,7 @@
       const res = await fetch(API_BASE + '/api/config');
       if (res.ok) {
         const data = await res.json();
+        serverHasApiKey = Boolean(data.hasServerKey);
         if (data.models && Array.isArray(data.models) && data.models.length > 0) {
           const currentVal = elements.modelSelect.value || settings.model;
           elements.modelSelect.innerHTML = '';
@@ -304,7 +311,7 @@
         if (data.hasServerKey && !settings.apiKey) {
           elements.apiKeyStatusCard.classList.remove('demo-mode');
           elements.apiKeyStatusLabel.textContent = 'Server API Key';
-          elements.apiKeySubText.textContent = 'Gemini 3.5 Ready';
+          elements.apiKeySubText.textContent = 'Gemini API key configured';
         }
       }
     } catch (e) {
@@ -316,11 +323,11 @@
     if (settings.apiKey && settings.apiKey.trim()) {
       elements.apiKeyStatusCard.classList.remove('demo-mode');
       elements.apiKeyStatusLabel.textContent = 'Custom API Key';
-      elements.apiKeySubText.textContent = 'Gemini Live Active';
+      elements.apiKeySubText.textContent = 'Gemini API key detected';
     } else {
       elements.apiKeyStatusCard.classList.add('demo-mode');
-      elements.apiKeyStatusLabel.textContent = 'Multimodal Demo';
-      elements.apiKeySubText.textContent = 'Tap to add API key';
+      elements.apiKeyStatusLabel.textContent = 'API Key Required';
+      elements.apiKeySubText.textContent = 'Add your Gemini API key';
     }
   }
 
@@ -569,7 +576,7 @@
           return `
             <div class="generated-image-item">
               <img src="${escapeHtml(image.dataUrl)}" alt="Generated image ${imageIndex + 1}" class="generated-image-preview" title="Click to expand">
-              <a class="generated-image-download" href="${escapeHtml(image.dataUrl)}" download="mm-chatbot-image-${imageIndex + 1}.${extension}">Download image</a>
+              <a class="generated-image-download" href="${escapeHtml(image.dataUrl)}" download="zenith-assistant-image-${imageIndex + 1}.${extension}">Download image</a>
             </div>
           `;
         }).join('')}</div>`
@@ -599,7 +606,7 @@
       </div>
       <div class="message-content-wrap">
         <div class="message-author-header">
-          <span class="message-author-name">${isUser ? 'You' : 'MM Chatbot'}</span>
+          <span class="message-author-name">${isUser ? 'You' : 'Zenith Assistant'}</span>
           <span class="message-timestamp">${formatTime(msg.timestamp || new Date().toISOString())}</span>
         </div>
         ${bubbleContent}
@@ -692,6 +699,14 @@
 
     const text = elements.messageInput.value.trim();
     if (!text && pendingAttachments.length === 0) return;
+    if (!settings.apiKey && serverHasApiKey === false) {
+      openModal(elements.settingsModal);
+      elements.apiKeyTestFeedback.textContent = 'Add your Gemini API key, then save Settings to start chatting.';
+      elements.apiKeyTestFeedback.classList.remove('hidden', 'success');
+      elements.apiKeyTestFeedback.classList.add('error');
+      elements.apiKeyInput.focus();
+      return;
+    }
     if (imageGenerationMode || isImageGenerationRequest(text)) {
       imageGenerationMode = false;
       await generateImage(text);
@@ -748,7 +763,7 @@
     const streamRow = createStreamRowDOM(assistantIndex);
     const streamBody = streamRow.querySelector('.bubble-markdown-body');
     if (streamBody) {
-      streamBody.innerHTML = `<em>🎨 Generating artwork for <strong>"${escapeHtml(text)}"</strong> with Neural AI Studio...</em>`;
+      streamBody.innerHTML = `<em>Zenith Assistant is preparing an answer...</em>`;
     }
     elements.messagesList.appendChild(streamRow);
     scrollToBottom();
@@ -894,9 +909,43 @@
     if (/\b(generate|create|make|draw|design|paint)\b.*\b(image|picture|photo|illustration|artwork|wallpaper|drawing)\b/i.test(t)) return true;
 
     // Multilingual & Roman Hindi support
-    const imageWords = /\b(?:image|picture|photo|photograph|illustration|artwork|wallpaper|poster|logo|thumbnail|icon|tasveer|tasvir)\b|तस्वीर|तसवीर|फोटो|चित्र|छवि|इमेज/i;
-    const generationWords = /\b(?:generate|create|make|draw|design|paint|illustrate|render|bana(?:o|do)?|bna(?:o|do)?|karo|kar\s+do|want|need|show\s+me)\b|बनाओ|बना\s*दो|बनादो|तैयार\s*करो/i;
-    return imageWords.test(t) && generationWords.test(t);
+    const imageWords = /\b(?:image|picture|photo|photograph|illustration|artwork|wallpaper|poster|logo|thumbnail|icon|tasveer|tasvir|pic)\b|तस्वीर|तसवीर|फोटो|चित्र|छवि|इमेज/i;
+    const generationWords = /\b(?:generate|create|make|draw|design|paint|illustrate|render|bana(?:o|do)?|bna(?:o|do)?|karo|kar\s+do|want|need|show\s+me|dikhao)\b|बनाओ|बना\s*दो|बनादो|तैयार\s*करो/i;
+    if (imageWords.test(t) && generationWords.test(t)) return true;
+
+    // Common query patterns like 'shinchan image' or 'photo of doraemon' or 'shinchan ki photo'
+    if (/^(?:image|photo|picture|pic)\s+(?:of|for)\s+/i.test(t)) return true;
+    if (/^.+\s+(?:image|photo|picture|pic)$/i.test(t) && !/^(?:what|how|who|why|where|can|is|are)\b/i.test(t)) return true;
+    if (/^.+\s+ki\s+(?:photo|image|picture|pic|tasveer)$/i.test(t)) return true;
+
+    // Catch common typing errors such as "gemnerate the imag of ..." without
+    // mistaking ordinary questions for image requests.
+    const words = t.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+    const fuzzyCandidates = [...words];
+    for (let i = 0; i < words.length - 1; i++) fuzzyCandidates.push(words[i] + words[i + 1]);
+    const nearWord = (candidate, target, maxDistance) => {
+      if (Math.abs(candidate.length - target.length) > maxDistance) return false;
+      let previous = Array.from({ length: target.length + 1 }, (_, index) => index);
+      for (let row = 1; row <= candidate.length; row++) {
+        const current = [row];
+        for (let column = 1; column <= target.length; column++) {
+          current[column] = Math.min(
+            current[column - 1] + 1,
+            previous[column] + 1,
+            previous[column - 1] + (candidate[row - 1] === target[column - 1] ? 0 : 1)
+          );
+        }
+        previous = current;
+      }
+      return previous[target.length] <= maxDistance;
+    };
+    const hasGenerateIntent = fuzzyCandidates.some(word =>
+      ['generate', 'create', 'draw', 'paint', 'make'].some(target => nearWord(word, target, 2))
+    );
+    const hasImageSubject = fuzzyCandidates.some(word =>
+      ['image', 'picture', 'photo', 'artwork'].some(target => nearWord(word, target, 1))
+    );
+    return hasGenerateIntent && hasImageSubject;
   }
 
   async function generateImage(prompt) {
@@ -948,7 +997,7 @@
     const streamRow = createStreamRowDOM(assistantIndex);
     const streamBody = streamRow.querySelector('.bubble-markdown-body');
     if (streamBody) {
-      streamBody.innerHTML = `<em>🎨 Generating artwork for <strong>"${escapeHtml(text)}"</strong> with Neural AI Studio...</em>`;
+      streamBody.innerHTML = `<em>Generating image for <strong>"${escapeHtml(text)}"</strong>...</em>`;
     }
     elements.messagesList.appendChild(streamRow);
     scrollToBottom();
@@ -1019,7 +1068,7 @@
       </div>
       <div class="message-content-wrap">
         <div class="message-author-header">
-          <span class="message-author-name">MM Chatbot</span>
+          <span class="message-author-name">Zenith Assistant</span>
           <span class="message-timestamp">${formatTime(new Date().toISOString())}</span>
         </div>
         <div class="message-bubble-assistant">
@@ -1637,6 +1686,7 @@
       card.addEventListener('click', () => {
         const prompt = card.dataset.prompt;
         const action = card.dataset.action;
+        imageGenerationMode = action === 'generate-image';
         elements.messageInput.value = prompt;
         elements.messageInput.focus();
         autoResizeTextarea();
@@ -1647,6 +1697,8 @@
         else if (action === 'generate-image') {
           imageGenerationMode = true;
           elements.messageInput.placeholder = 'Describe the image you want to create...';
+        } else {
+          elements.messageInput.placeholder = 'Ask anything, drag images/docs, or dictate voice...';
         }
       });
     });
@@ -1656,8 +1708,15 @@
       elements.capabilitiesBar.querySelectorAll('.cap-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           const mode = btn.dataset.mode;
+          imageGenerationMode = mode === 'generate-image';
+          if (mode !== 'generate-image') {
+            elements.messageInput.placeholder = 'Ask anything, drag images/docs, or dictate voice...';
+          }
           if (mode === 'ask') {
+            // Clear any starter prompt left by another quick mode and return to normal chat.
+            elements.messageInput.value = '';
             elements.messageInput.placeholder = 'Ask anything: Science, history, philosophy, life advice, facts...';
+            autoResizeTextarea();
             elements.messageInput.focus();
           } else if (mode === 'code') {
             elements.messageInput.value = 'Write a clean, production-ready script to ';
@@ -1880,11 +1939,11 @@
       alert('There are no messages in this conversation to export.');
       return;
     }
-    let md = `# ${chat.title || 'MM Chatbot Conversation'}\n\n`;
+    let md = `# ${chat.title || 'Zenith Assistant Conversation'}\n\n`;
     md += `*Exported on ${new Date().toLocaleString()}*\n\n---\n\n`;
     chat.messages.forEach(m => {
       const isU = (m.role === 'user');
-      const sender = isU ? '👤 **You**' : '🌌 **MM Chatbot**';
+      const sender = isU ? '👤 **You**' : '🌌 **Zenith Assistant**';
       md += `### ${sender} *(${formatTime(m.timestamp)})*\n\n${m.content || ''}\n\n---\n\n`;
     });
     const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
