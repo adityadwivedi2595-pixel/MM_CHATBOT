@@ -1,4 +1,4 @@
-# Production Dockerfile for MM CHATBOT
+# Production Dockerfile for ZENITH ASSISTANT
 FROM node:20-alpine
 
 # Set working directory

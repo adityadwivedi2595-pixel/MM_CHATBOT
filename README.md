@@ -1,8 +1,8 @@
-# 🌌 MM CHATBOT — Next-Gen Multimodal AI Assistant
+# 🌌 ZENITH ASSISTANT — Next-Gen Multimodal AI Assistant
 
-A high-performance, full-stack Multimodal AI Chatbot powered by Google Gemini (Gemini 3.5 Flash, Gemini 3.8 Flash, Gemini 3.5 Flash Lite & Gemini 3.1 Pro) with native support for **Text**, **Image Generation**, **Vision & Images**, **Live Camera Snapshots**, **Voice Dictation**, **Audio Waveforms**, **Text-to-Speech (TTS)**, and **Document Intelligence**.
+A high-performance, full-stack multimodal AI chatbot powered by Google Gemini, with support for **Text**, **Image Generation**, **Vision & Images**, **Live Camera Snapshots**, **Voice Dictation**, **Audio Waveforms**, **Text-to-Speech (TTS)**, and **Document Intelligence**.
 
-![MM Chatbot Avatar](public/assets/avatar.jpg)
+![Zenith Assistant Avatar](public/assets/avatar.jpg)
 
 ---
 
@@ -18,7 +18,7 @@ A high-performance, full-stack Multimodal AI Chatbot powered by Google Gemini (G
 - 💻 **Syntax-Highlighted Code Blocks**: Clean dark code presentation with language tags and one-click copy buttons.
 - 🎨 **Sleek Glassmorphic Design**: Curated dark palettes (Obsidian Dark, Cyberpunk Neon, Deep Midnight, Glass Light) with neon glows, micro-animations, and responsive mobile/desktop layout.
 - ⚙️ **Customizable AI Personas & Temperature**: Choose between Multimodal Genius, Senior Software Architect, Document Analyst, Creative Storyteller, or custom system instructions.
-- 🧪 **Instant Zero-Setup Demonstration Mode**: Works immediately out of the box even before adding an API key, plus easy live Gemini API Key testing directly inside the UI.
+- 🔑 **Gemini API Setup**: Add and validate a Gemini API key in Settings. Chat and image generation use the configured Gemini project.
 
 ---
 
@@ -30,9 +30,9 @@ Copy `.env.example` to `.env` or enter your Gemini API key inside the UI **Setti
 GEMINI_API_KEY=your_gemini_api_key_here
 PORT=3000
 ```
-*(Get a free key from [Google AI Studio](https://aistudio.google.com/app/apikey))*
+Create a key in [Google AI Studio](https://aistudio.google.com/app/apikey).
 
-Image generation uses Gemini's `gemini-nano-banana-2.1` model through the Interactions API and requires a Gemini API key with access to that model. Image-generation availability and quotas depend on the Google AI project; the chatbot displays the provider's error if image generation is not enabled for the key.
+Chat uses Gemini's streaming Interactions API for text and vision. Image generation uses Gemini's Nano Banana Interactions API with available model fallback. User prompts and explicit styles are passed through; when no style is specified, photorealism is used by default.
 
 ### 2A. Run with Node.js (Production Server)
 ```bash

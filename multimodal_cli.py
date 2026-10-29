@@ -1,20 +1,16 @@
-"""
-MM CHATBOT — Standalone Python Multimodal CLI Tool
-Use Google Gemini 2.0 directly in Python for vision, text, and audio.
-
-Usage Examples:
-    python multimodal_cli.py --prompt "Hello! Introduce yourself."
-    python multimodal_cli.py --image "screenshot.png" --prompt "What is shown in this image?"
-    python multimodal_cli.py --interactive
-"""
+"""Zenith Assistant standalone multimodal CLI using Gemini's streaming API."""
 
 import os
 import sys
 import argparse
+import base64
+import json
+import mimetypes
 from pathlib import Path
+
+import requests
 from dotenv import load_dotenv
 
-# Ensure UTF-8 output on Windows
 if sys.platform == "win32":
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -24,91 +20,64 @@ if sys.platform == "win32":
 
 load_dotenv()
 
-try:
-    from google import genai
-    from google.genai import types
-except ImportError:
-    print("Error: 'google-genai' library not installed.")
-    print("Run: pip install -r requirements.txt")
-    sys.exit(1)
 
-
-def get_client(api_key: str = None) -> genai.Client:
+def get_api_key(api_key: str = None) -> str:
     key = (api_key or os.getenv("GEMINI_API_KEY", "")).strip()
     if not key:
-        print("\n⚠️  No GEMINI_API_KEY found!")
-        print("Please set your key in .env or pass it with --api-key YOUR_KEY")
-        print("Get your free key at: https://aistudio.google.com/app/apikey\n")
-        key = input("Enter your Gemini API Key now (or press Enter to exit): ").strip()
-        if not key:
-            sys.exit(1)
-    return genai.Client(api_key=key)
+        print("\nNo GEMINI_API_KEY found. Set it in .env or pass --api-key YOUR_KEY.")
+        print("Create one at https://aistudio.google.com/app/apikey\n")
+        key = input("Enter your Gemini API key (or press Enter to exit): ").strip()
+    if not key:
+        sys.exit(1)
+    return key
 
 
-def normalize_model(model: str) -> str:
-    deprecated_map = {
-        "gemini-2.0-flash": "gemini-3.5-flash",
-        "gemini-2.5-flash": "gemini-3.5-flash",
-        "gemini-1.5-flash": "gemini-3.5-flash",
-        "gemini-1.5-pro": "gemini-3.1-pro-preview",
-        "gemini-2.0-pro": "gemini-3.1-pro-preview",
-        "gemini-2.5-pro": "gemini-3.1-pro-preview",
-        "gemini-2.5-flash-lite": "gemini-3.5-flash-lite"
-    }
-    return deprecated_map.get(model, model)
-
-
-def run_query(client: genai.Client, prompt: str, image_path: str = None, model: str = "gemini-3.5-flash"):
-    model = normalize_model(model)
-    parts = []
-
+def run_query(api_key: str, prompt: str, image_path: str = None, model: str = "gemini-3.6-flash"):
+    parts = [{"text": prompt}]
     if image_path:
-        p = Path(image_path)
-        if not p.exists():
-            print(f"Error: Image file '{image_path}' not found.")
+        path = Path(image_path)
+        if not path.exists():
+            print(f"Error: File '{image_path}' not found.")
             return
+        mime_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        parts.insert(0, {"inline_data": {"mime_type": mime_type, "data": base64.b64encode(path.read_bytes()).decode("ascii")}})
+        print(f"Attached file: {path.name} ({mime_type})")
 
-        with open(p, "rb") as f:
-            data = f.read()
-
-        suffix = p.suffix.lower()
-        mime_map = {
-            ".png": "image/png",
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".webp": "image/webp",
-            ".gif": "image/gif",
-            ".pdf": "application/pdf"
-        }
-        mime = mime_map.get(suffix, "image/jpeg")
-        parts.append(types.Part.from_bytes(data=data, mime_type=mime))
-        print(f"📎 Attached file: {p.name} ({mime})")
-
-    parts.append(types.Part.from_text(text=prompt))
-
-    print(f"\n🤖 MM Chatbot ({model}): ", end="", flush=True)
-
+    print(f"\nZenith Assistant ({model}): ", end="", flush=True)
     try:
-        response_stream = client.models.generate_content_stream(
-            model=model,
-            contents=[types.Content(role="user", parts=parts)]
-        )
-        for chunk in response_stream:
-            if chunk.text:
-                print(chunk.text, end="", flush=True)
+        with requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse",
+            headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+            json={"contents": [{"role": "user", "parts": parts}]}, stream=True, timeout=(20, 180),
+        ) as response:
+            if not response.ok:
+                try:
+                    detail = response.json().get("error", {}).get("message", f"HTTP {response.status_code}")
+                except Exception:
+                    detail = f"HTTP {response.status_code}"
+                print(f"\nGemini API error: {detail}\n")
+                return
+            for line in response.iter_lines(decode_unicode=True):
+                if not line or not line.startswith("data:"):
+                    continue
+                try:
+                    event = json.loads(line[5:].strip())
+                except json.JSONDecodeError:
+                    continue
+                for chunk in event.get("candidates", [{}])[0].get("content", {}).get("parts", []):
+                    if chunk.get("text"):
+                        print(chunk["text"], end="", flush=True)
         print("\n")
-    except Exception as e:
-        print(f"\nError from Gemini API: {e}\n")
+    except requests.RequestException as exc:
+        print(f"\nGemini request failed: {exc}\n")
 
 
-def interactive_mode(client: genai.Client, model: str = "gemini-3.5-flash"):
-    model = normalize_model(model)
+def interactive_mode(api_key: str, model: str = "gemini-3.6-flash"):
     print("=" * 60)
-    print(f"🌌 MM CHATBOT Interactive Python Shell ({model})")
+    print(f"ZENITH ASSISTANT Interactive Shell ({model})")
     print("Type your message and press Enter. Type 'exit' to quit.")
-    print("To attach an image, type: /image path/to/image.png [your question]")
+    print("To attach an image or document, type: /image path/to/file [your question]")
     print("=" * 60)
-
     while True:
         try:
             user_input = input("\nYou > ").strip()
@@ -117,36 +86,29 @@ def interactive_mode(client: genai.Client, model: str = "gemini-3.5-flash"):
             if user_input.lower() in ("exit", "quit", "q"):
                 print("Goodbye!")
                 break
-
             if user_input.startswith("/image "):
                 parts = user_input.split(" ", 2)
-                img_path = parts[1]
-                query = parts[2] if len(parts) > 2 else "Analyze this image in detail."
-                run_query(client, prompt=query, image_path=img_path, model=model)
+                run_query(api_key, parts[2] if len(parts) > 2 else "Analyze this file.", parts[1], model)
             else:
-                run_query(client, prompt=user_input, model=model)
-
+                run_query(api_key, user_input, model=model)
         except (KeyboardInterrupt, EOFError):
             print("\nExiting session.")
             break
 
 
 def main():
-    parser = argparse.ArgumentParser(description="MM CHATBOT Python CLI")
+    parser = argparse.ArgumentParser(description="ZENITH ASSISTANT Python CLI")
     parser.add_argument("--prompt", "-p", type=str, help="Text prompt to send")
-    parser.add_argument("--image", "-i", type=str, help="Path to image or document file")
-    parser.add_argument("--model", "-m", type=str, default="gemini-3.5-flash", help="Gemini model name")
-    parser.add_argument("--api-key", "-k", type=str, help="Gemini API Key")
+    parser.add_argument("--image", "-i", type=str, help="Path to an image or document file")
+    parser.add_argument("--model", "-m", type=str, default="gemini-3.6-flash", help="Gemini model name")
+    parser.add_argument("--api-key", "-k", type=str, help="Gemini API key")
     parser.add_argument("--interactive", action="store_true", help="Launch interactive chat session")
-
     args = parser.parse_args()
-
-    client = get_client(args.api_key)
-
+    api_key = get_api_key(args.api_key)
     if args.interactive or not args.prompt:
-        interactive_mode(client, model=args.model)
+        interactive_mode(api_key, args.model)
     else:
-        run_query(client, prompt=args.prompt, image_path=args.image, model=args.model)
+        run_query(api_key, args.prompt, args.image, args.model)
 
 
 if __name__ == "__main__":
